@@ -5,7 +5,6 @@ import { env } from "~/env";
 import { appRouter } from "~/server/api/root";
 import { createTRPCContext } from "~/server/api/trpc";
 
-// Build the tRPC handler once
 const trpcHandler = createNextApiHandler({
   router: appRouter,
   createContext: createTRPCContext,
@@ -17,7 +16,10 @@ const trpcHandler = createNextApiHandler({
       : undefined,
 });
 
-// Export a concrete Pages API function so Next 15's validator sees (req,res)=>...
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  return trpcHandler(req, res);
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+): Promise<void> {
+  // explicitly await so our function's return type is Promise<void>
+  await trpcHandler(req, res);
 }
