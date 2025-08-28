@@ -126,7 +126,7 @@ export default function Home() {
           </h1>
           <div className="flex justify-between mt-11 mb-10 mr-30">
             <p className="max-w-5xl text-[25px] leading-[1.1]">
-              Skip the code. Transform your data into custom interfaces, automations, and agents with Airtable's AI-native app platform.
+              Skip the code. Transform your data into custom interfaces, automations, and agents with Airtable&apos;s AI-native app platform.
             </p>
 
             <div className="flex justify-center gap-2">
