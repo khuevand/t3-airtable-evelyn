@@ -90,13 +90,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section>
-        <div className="flex flex-1 h-full">
-          {/* Sidebar */}
-          <aside className="w-12 bg-white border-r border-slate-200"></aside>
+      <section className="flex-1 flex min-h-0">
+        {/* Sidebar */}
+        <aside className="w-12 bg-white border-r border-slate-200"></aside>
 
-          {/* Main content */}
-          <section className="flex-1 bg-gray-50"></section>
+        {/* Main content */}
+        <div className="flex-1 bg-gray-100 min-h-0 overflow-auto">
+          {/* page content goes here */}
         </div>
       </section>
     </main>
