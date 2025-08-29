@@ -17,31 +17,22 @@ import {
   Grid2X2,
   Sparkles,
   TableProperties,
-  Ellipsis,
-  Database,
-  Trash2,
-  User,
-  Users,
-  Languages,
-  Palette,
-  Mail,
-  Link as LucideLink,
-  Wrench,
-  LogOut,
-  ChevronRight
+  ChevronDown
 } from "lucide-react";
 import Image from "next/image";
 import { useUser, SignOutButton } from "@clerk/nextjs";
 import { useState } from "react";
 import Link from 'next/link';
+import { ProfileMenu } from "~/components/profileMenu";
 export default function HomePage() {
   const { user, isLoaded, isSignedIn } = useUser();
-  // const [isSideBarOpen, setSideBarOpen] = useState(false);
-  const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
-  const toggleMenu = () => setProfileMenuOpen(!isProfileMenuOpen);
+  const [isSideBarOpen, setSideBarOpen] = useState(false);
+  const [isSideBarOpenHover, setSideBarOpenHover] = useState(false);
+  const [isbaseTimeSelection, setBaseTimeSelection] = useState(false);
+  const sidebarExpanded = isSideBarOpen || isSideBarOpenHover;
 
   return(
-    <main className='h-screen flex flex-col bg-white'>
+    <div className='h-screen flex flex-col bg-white'>
       <header className="flex items-center justify-center bg-[#f0f6ff] border-b border-slate-200 px-9 py-3">
         <div className="flex items-center gap-1">
           <Info className="w-4.5 h-4.5 text-[#1b61c9] mr-1" />
@@ -50,9 +41,14 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="w-full flex items-center justify-between px-3 py-2 bg-white border-b border-slate-200">
+      <section className="w-full flex items-center justify-between px-3 py-2 bg-white border-b border-gray-200 shadow-sm">
         <div className="flex items-center gap-4">
-          <AlignJustify className="w-4.5 h-4.5 text-gray-400 hover:text-gray-700 cursor-pointer"/>
+          <button
+            onClick={() => setSideBarOpen(prev => !prev)}
+            title="Extend sidebar">
+            <AlignJustify className="w-4.5 h-4.5 text-gray-400 hover:text-gray-700 cursor-pointer"/>
+          </button>
+          
           <Link href="/home">
             <Image src="/Airtable-Logo.png" alt="Logo" width={110} height={40} />
           </Link>
@@ -81,130 +77,155 @@ export default function HomePage() {
           >
             <Bell className="w-4 h-4"></Bell>
           </button>
-
-          <div className='relative inline-block'>
-            <button onClick={toggleMenu}>
-              {user?.imageUrl ? (
-                <Image
-                  src={user.imageUrl}
-                  alt="User avatar"
-                  className="rounded-full mt-2 ml-1 hover:ring-gray-100 hover:border-gray-100 cursor-pointer"
-                  width={26}
-                  height={26}
-                />
-              ) : (
-                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-purple-500 text-white text-sm font-semibold">
-                  {user?.firstName?.[0] ?? "A"}
-                </div>
-              )}
-            </button>
-
-            {isProfileMenuOpen && (
-              <div className="absolute right-0 z-10 w-75 rounded-lg text-[13px] text-gray-800 bg-white shadow-lg border border-gray-300 ring-opacity-1">
-                <div className='px-5 py-4'>
-                  <p className='font-medium mb-0.5'>{user?.fullName}</p>
-                  <p className=''>{user?.primaryEmailAddress?.emailAddress}</p>
-                </div>
-  
-                <div className='mx-4 border-b border-gray-100'/>
-                
-                <div className="px-3 py-2">
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <User className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Account</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Users className="w-3.5 h-3.5 text-gray-700"/>
-                      <span>Manage Groups</span>
-                    </div>
-                    <span className="text-[11px] text-[#0f68a2] font-medium bg-[#c4ecff] rounded-xl px-2 py-0.5">
-                      Business
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Bell className="w-3.5 h-3.5 text-gray-700" />
-                      <span>Notification preferences</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Languages className="w-3.5 h-3.5 text-gray-700" />
-                      <span>Language preferences</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
-                  </div>
-                  <div className="flex items-center justify-between gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Palette className="w-3.5 h-3.5 text-gray-700" />
-                      <span>Appearance</span>
-                      <span className="text-[11px] text-[#c1812d] font-medium bg-[#f9e192] rounded-xl px-2 py-0.5">Beta</span>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-500" />
-                  </div>
-                </div>
-
-                <div className='mx-4 border-b border-gray-100'/>
-
-                <div className="px-3 py-2">
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <Mail className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Contact sales</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <Star className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Upgrade</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <Mail className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Tell a friend</span>
-                  </div>
-                </div>
-
-                <div className='mx-4 border-b border-gray-100'/>
-
-                <div className="px-3 py-2">
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <LucideLink className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Integrations</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <Wrench className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Builder hub</span>
-                  </div>
-                </div>
-
-                <div className='mx-4 border-b border-gray-100'/>
-
-                <div className="px-3 py-2">
-                  <div className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                    <Trash2 className="w-3.5 h-3.5 text-gray-700"/>
-                    <span>Trash</span>
-                  </div>
-                  <SignOutButton redirectUrl="/">
-                    <button className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer">
-                      <LogOut className="w-3.5 h-3.5" />
-                      Log out
-                    </button>
-                  </SignOutButton>
-                </div>
-              </div>
-            )}
-          </div>
+          <ProfileMenu/>
         </div>
       </section>
 
       <section className="flex-1 flex min-h-0">
-        {/* Sidebar */}
-        <aside className="w-12 bg-white border-r border-slate-200"></aside>
+        <aside
+          className={`transition-all duration-300 ${
+            sidebarExpanded ? "w-72 gap-120" : "w-12 gap-128"
+          } bg-white border-r border-gray-200 p-2 flex flex-col`}
+          onMouseEnter={() => setSideBarOpenHover(true)}
+          onMouseLeave={() => setSideBarOpenHover(false)}
+        >
+          <div className="flex flex-col text-gray-700 text-[15.5px]">
+            <div className="flex items-center gap-3 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+              <House className="w-4.5 h-4.5 flex-shrink-0" />
+              {sidebarExpanded && <span className="font-semibold truncate">Home</span>}
+            </div>
+
+            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+              <Star className="w-4.5 h-4.5 flex-shrink-0" />
+              {sidebarExpanded && <span className="font-semibold truncate">Starred</span>}
+            </div>
+
+            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+              <ExternalLink className="w-4.5 h-4.5 flex-shrink-0" />
+              {sidebarExpanded && <span className="font-semibold truncate">Shared</span>}
+            </div>
+
+            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+              <UsersRound className="w-4.5 h-4.5 flex-shrink-0" />
+              {sidebarExpanded && <span className="font-semibold truncate">Workspaces</span>}
+            </div>
+            <div className={`${!sidebarExpanded && "mx-1 mt-2 border-b border-gray-200"} `}/>
+          </div>
+        
+          <div className="flex flex-col text-gray-700 text-[13px]">
+            <div className={`mt-3 mb-3 ${sidebarExpanded ? "mx-4" : "mx-0"} border-b border-gray-200`}/>
+            <div className=" space-y-1">
+              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+                <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
+                {sidebarExpanded && <span className="font-normal truncate">Templates and apps</span>}
+              </div>
+
+              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+                <ShoppingBag className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
+                {sidebarExpanded && <span className="font-normal truncate">Marketplace</span>}
+              </div>
+              
+              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
+                <Share className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
+                {sidebarExpanded && <span className="font-normal truncate">Import</span>}
+              </div>
+              
+              <button className={`flex items-center justify-center gap-3 px-1.5 py-2 w-full rounded-md cursor-pointer transition-colors ${sidebarExpanded ? "bg-[#1b61c9] text-[#f0f6ff]" : "bg-white hover:bg-gray-100"}`}>
+                <Plus className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-white" : "text-gray-400"}`}/>
+                {sidebarExpanded && <span className="font-normal truncate">Create</span>}
+              </button>
+            </div>
+          </div>
+        </aside>
 
         {/* Main content */}
-        <div className="flex-1 bg-gray-100 min-h-0 overflow-auto">
-          {/* page content goes here */}
-        </div>
+        <main className="flex-1 bg-[#f9fafb] min-h-0 overflow-auto">
+          <div className="flex items-center justify-center bg-[#e6fce8] text-[13px] py-2.5 gap-2">
+            <CircleCheck className="w-[18px] h-[18px] text-[#048a0e]" />
+            <div className="flex items-center justify-center gap-1">
+              <p className="font-medium">Welcome to the improved Home.</p>
+              <p className= "text-gray-700"> Find, navigate to, and manage your apps more easily.</p>
+            </div>
+            <button className="border border-gray-300 bg-white px-2.5 py-1.5 rounded-lg shadow-xs hover:shadow-sm cursor-pointer">
+              <span>See what&apos;s new</span>
+            </button>
+          </div>
+          
+          <div className="flex flex-col px-11 py-7">
+            <h1 className="text-gray-800 text-[27px] font-bold">Home</h1>
+            <div className="flex items-center justify-between space-x-2 mt-7">
+              <button className="flex flex-col h-19 w-105 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-[#dc64c1]" />
+                  <p className="font-medium">Start with Omni</p>
+                </div>
+                <p className="text-left font-normal text-gray-500 text-[12.5px] mb-2">Use AI to build a custom app tailored to your workflow</p>
+              </button>
+
+              <button className="flex flex-col h-19 w-110 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+                <div className="flex items-center gap-1.5">
+                  <Grid2X2 className="w-4 h-4 text-[#6a5292]"/>
+                  <p className="font-medium">Start with templates</p>
+                </div>
+                <p className="text-left font-normal text-gray-500 text-[12.5px] mb-2">Select a template to get started and customize as you go.</p>
+              </button>
+
+              <button className="flex flex-col h-19 w-110 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+                <div className="flex items-center gap-1.5">
+                  <ArrowUp className="w-4 h-4 text-[#1f8881]"/>
+                  <p className="font-medium">Quickly upload</p>
+                </div>
+                <p className="text-left font-normal text-gray-500 text-[12.5px] mb-2">Easily migrate existing projects in just a few minutes.</p>
+              </button>
+
+              <button className="flex flex-col h-19 w-110 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+                <div className="flex items-center gap-1.5">
+                  <TableProperties className="w-4 h-4 text-[#3b66a3]" />
+                  <p className="font-medium">Build an app on your own</p>
+                </div>
+                <p className="text-left font-normal text-gray-500 text-[12.5px] mb-2">Start with a blank app and build your ideal workflow.</p>
+              </button>
+            </div>
+                      
+            <div className="flex flex-col mt-7">
+              <div className="flex justify-between">
+                <div className="relative space-y-2">
+                  <button
+                    onClick={() => setBaseTimeSelection(!isbaseTimeSelection)}
+                    className="flex items-center text-[15px] text-gray-500 hover:text-black gap-1">
+                    <span>Opened anytime</span>
+                    <ChevronDown className="w-3.5 h=3.5"></ChevronDown>
+                  </button>
+                  {isbaseTimeSelection && (
+                    <div className="absolute z-10 w-60 rounded-lg text-[13px] text-gray-800 bg-white shadow-lg border border-gray-300 ring-opacity-1">
+                        <div className="flex flex-col text-left p-2 gap-0.5">
+                          <span className="p-2 rounded-md hover:bg-gray-100">Today</span>
+                          <span className="p-2 rounded-md hover:bg-gray-100">In past 7 days</span>
+                          <span className="p-2 rounded-md hover:bg-gray-100">In past 30 days</span>
+                          <span className="p-2 rounded-md hover:bg-gray-100">Anytime</span>
+                        </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button className="p-1 rounded-full" title="View items in list">
+                    <AlignJustify className="w-4.5 h-4.5 text-gray-500 hover:text-gray-600 cursor-pointer" />
+                  </button>
+                  <button className="px-1 py-1 rounded-full bg-gray-200" title="View items in grid">
+                    <Grid2X2 className="w-4.5 h-4.5 text-gray-600" />
+                  </button>
+                </div>
+              </div>
+
+            <button className="flex items-center justify-center h-15 w-60 bg-white border px-4 py-3 mt-7 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+              <p className="font-normal">Base placeholder</p>
+            </button>
+
+            </div>
+          </div>
+        </main>
       </section>
-    </main>
+    </div>
   );
 }
