@@ -6,7 +6,8 @@
  * TL;DR - This is where all the tRPC server stuff is created and plugged in. The pieces you will
  * need to use are documented accordingly near the end.
  */
-import { initTRPC } from "@trpc/server";
+import { clerkClient, currentUser, getAuth } from "@clerk/nextjs/server";
+import { initTRPC, TRPCError } from "@trpc/server";
 import { type CreateNextContextOptions } from "@trpc/server/adapters/next";
 import superjson from "superjson";
 import { ZodError } from "zod";
@@ -45,10 +46,58 @@ const createInnerTRPCContext = (_opts: CreateContextOptions) => {
  *
  * @see https://trpc.io/docs/context
  */
-export const createTRPCContext = (_opts: CreateNextContextOptions) => {
-  return createInnerTRPCContext({});
-};
+// export const createTRPCContext = async ({ req }: CreateNextContextOptions) => {
+//   const { userId } = getAuth(req);
+//   const user = userId ? await (await clerkClient()).users.getUser(userId) : null;
+//   return {
+//     db,
+//     currentUser: user,
+//   }
+// }
+export const createTRPCContext = async ({ req }: CreateNextContextOptions) => {
+  const { userId } = getAuth(req);
+  
+  let currentUser = null;
+  
+  if (userId) {
+    try {
+      // Fetch full user object from Clerk
+      currentUser = await (await clerkClient()).users.getUser(userId);
+      
+      // Try to sync user to database
+      const email = currentUser.primaryEmailAddress?.emailAddress ??
+                   currentUser.emailAddresses?.[0]?.emailAddress ??
+                   "";
+      
+      if (email) {
+        await db.user.upsert({
+          where: { id: currentUser.id },
+          update: {
+            email: email,
+            name: currentUser.firstName ?? "",
+          },
+          create: {
+            id: currentUser.id,
+            email: email,
+            name: currentUser.firstName ?? "",
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch user or sync to database:", error);
+      
+      // If we can't fetch from Clerk or sync to DB, create minimal user object
+      if (userId) {
+        currentUser = { id: userId }; // Minimal fallback
+      }
+    }
+  }
 
+  return {
+    db,
+    currentUser,
+  };
+};
 /**
  * 2. INITIALIZATION
  *
@@ -123,3 +172,19 @@ const timingMiddleware = t.middleware(async ({ next, path }) => {
  * are logged in.
  */
 export const publicProcedure = t.procedure.use(timingMiddleware);
+
+const enforceUserIsAuthed = t.middleware(async ({ ctx, next }) => {
+  if (!ctx.currentUser){
+    throw new TRPCError({
+      code: "UNAUTHORIZED",
+    });
+  }
+
+  return next({
+    ctx: {
+      currentUser: ctx.currentUser,
+    },
+  });
+});
+
+export const privateProcedure = t.procedure.use(enforceUserIsAuthed);

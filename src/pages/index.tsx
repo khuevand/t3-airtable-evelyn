@@ -1,10 +1,6 @@
-// import Head from "next/head";
 import { SignInButton,
-          // SignOutButton,
-          // SignedIn,
           SignedOut,
           useUser} from '@clerk/nextjs'
-// import { api } from "~/utils/api";
 import Link from "next/link";
 import {
   ArrowRight,

@@ -1,35 +1,148 @@
 import {
   Bell, 
   HelpCircle,
-  Plus,
   Search,
   AlignJustify,
   Info,
   CircleCheck,
-  House,
-  Star,
-  ExternalLink,
-  UsersRound,
-  BookOpen,
-  ShoppingBag,
-  Share,
   ArrowUp,
   Grid2X2,
   Sparkles,
   TableProperties,
+  Database,
   ChevronDown
 } from "lucide-react";
 import Image from "next/image";
-import { useUser, SignOutButton } from "@clerk/nextjs";
+import { useUser } from "@clerk/nextjs";
 import { useState } from "react";
+import { useRouter } from "next/router";
 import Link from 'next/link';
 import { ProfileMenu } from "~/components/profileMenu";
+import { Sidebar } from "~/components/sideBar";
+import LoadingState from "~/components/loadingState";
+import { api } from "~/utils/api";
+import { v4 as uuidv4 } from "uuid";
+import { toast } from "react-toastify";
 export default function HomePage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const [isSideBarOpen, setSideBarOpen] = useState(false);
   const [isSideBarOpenHover, setSideBarOpenHover] = useState(false);
   const [isbaseTimeSelection, setBaseTimeSelection] = useState(false);
-  const sidebarExpanded = isSideBarOpen || isSideBarOpenHover;
+  const [isCreateBase, setCreateBase] = useState(true);
+  const [confirmActiveBaseId, setActiveBaseId] = useState<string | null>(null);
+  const [confirmDeleteBaseId, setDeleteBaseId] = useState<string | null>(null);
+
+  const utils = api.useUtils();
+  const router = useRouter();
+
+  const {data: bases = [],
+         isLoading: isBaseLoading,
+  } = api.base.getBaseByUserId.useQuery(undefined, {enabled: isLoaded && !!user?.id})
+
+  const createBase = api.base.createBase.useMutation({
+    onMutate: async() => {
+      await utils.base.getBaseByUserId.cancel();
+      const prevBase = utils.base.getBaseByUserId.getData();
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      const optimisticBase = {
+        id: uuidv4(),
+        name: "Untitled Base",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userId: user.id,
+      }
+
+      utils.base.getBaseByUserId.setData(undefined, (old) => {
+        if (!old) return [optimisticBase];
+        return [optimisticBase, ...old];
+      });
+      void router.push(`/${optimisticBase.id}`);
+      setCreateBase(false);
+      return {prevBase, optimisticBase};
+    },
+
+    onError: (_error, _variables, ctx) => {
+      if (ctx?.prevBase){
+        utils.base.getBaseByUserId.setData(undefined, ctx.prevBase);
+      }
+      void router.push("/");
+      setCreateBase(false);
+      toast.error("Failed to create base. Please try again");
+    },
+
+    onSuccess: (data, _variables, ctx) => {
+      // if the old array of base is empty, return empty lip & append the new base
+      utils.base.getBaseByUserId.setData(undefined, (old) => {
+        if (!old) return [];
+
+        return old.map((base) => {
+          if(ctx?.optimisticBase && base.id === ctx.optimisticBase.id){
+            return{
+              id: data.base.id,
+              name: "Untitled Base",
+              userId: user?.id ?? "",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }
+          }
+          return base;
+        })
+      });
+      if (ctx.optimisticBase.id !== data.base.id){
+        void router.push(`/${data.base.id}`);
+      }
+      toast.success("Create base successfully!");
+    },
+
+    onSettled: () => {
+      void utils.base.getBaseByUserId.invalidate();
+    }
+  })
+
+  const deleteBase = api.base.deleteBase.useMutation({
+    onMutate: async({baseId}) => {
+      await utils.base.getBaseByUserId.cancel();
+      const prevBase = utils.base.getBaseByUserId.getData();
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+      utils.base.getBaseByUserId.setData(undefined, (old) => {
+        if (!old) return old;
+        return old.filter((oldBase) => oldBase.id != baseId);
+      })
+      setDeleteBaseId(null);
+
+      return {prevBase};
+    },
+
+    onError: (_err, _variables, ctx) => {
+      if (ctx?.prevBase) {
+        utils.base.getBaseByUserId.setData(undefined, ctx.prevBase);
+      }
+      toast.error("Something went wrong while deleting.");
+    },
+
+    onSuccess: () => {
+      toast.success("Base moved to trash.");
+    },
+
+    onSettled: async () => {
+      await utils.base.getBaseByUserId.invalidate();
+    },
+  })
+
+  const handleCreateBase = () => {
+    setCreateBase(true);
+    createBase.mutate({name: "Untitled Base"});
+  }
+
+  const handleDeleteBase = (baseId: string) => {
+    setDeleteBaseId(baseId);
+    deleteBase.mutate({ baseId });
+  };
 
   return(
     <div className='h-screen flex flex-col bg-white'>
@@ -54,7 +167,7 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="relative flex items-center max-w-90 pl-2 pr-28 py-1.5 rounded-3xl border border-slate-200 transition duration-300 ease focus-within:border-slate-400 hover:border-slate-300 shadow-xs focus-within:shadow-sm cursor-pointer">
+        <div className="relative flex items-center max-w-90 pl-2 pr-28 py-1.5 rounded-3xl border border-slate-200 transition duration-100 ease focus-within:border-slate-400 hover:border-slate-300 shadow-xs focus-within:shadow-sm cursor-pointer">
           <Search className="w-4 h-4 text-gray-800 mr-2 ml-2"/>
           <input
             className="w-full bg-transparent placeholder:text-slate-500 text-slate-700 text-[13px] pr-16 focus:outline-none"
@@ -82,61 +195,12 @@ export default function HomePage() {
       </section>
 
       <section className="flex-1 flex min-h-0">
-        <aside
-          className={`transition-all duration-300 ${
-            sidebarExpanded ? "w-72 gap-120" : "w-12 gap-128"
-          } bg-white border-r border-gray-200 p-2 flex flex-col`}
+        <Sidebar
+          isOpen={isSideBarOpen}
+          isHovering={isSideBarOpenHover}
           onMouseEnter={() => setSideBarOpenHover(true)}
           onMouseLeave={() => setSideBarOpenHover(false)}
-        >
-          <div className="flex flex-col text-gray-700 text-[15.5px]">
-            <div className="flex items-center gap-3 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-              <House className="w-4.5 h-4.5 flex-shrink-0" />
-              {sidebarExpanded && <span className="font-semibold truncate">Home</span>}
-            </div>
-
-            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-              <Star className="w-4.5 h-4.5 flex-shrink-0" />
-              {sidebarExpanded && <span className="font-semibold truncate">Starred</span>}
-            </div>
-
-            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-              <ExternalLink className="w-4.5 h-4.5 flex-shrink-0" />
-              {sidebarExpanded && <span className="font-semibold truncate">Shared</span>}
-            </div>
-
-            <div className="flex items-center gap-2 px-1.5 py-2.5 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-              <UsersRound className="w-4.5 h-4.5 flex-shrink-0" />
-              {sidebarExpanded && <span className="font-semibold truncate">Workspaces</span>}
-            </div>
-            <div className={`${!sidebarExpanded && "mx-1 mt-2 border-b border-gray-200"} `}/>
-          </div>
-        
-          <div className="flex flex-col text-gray-700 text-[13px]">
-            <div className={`mt-3 mb-3 ${sidebarExpanded ? "mx-4" : "mx-0"} border-b border-gray-200`}/>
-            <div className=" space-y-1">
-              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-                <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
-                {sidebarExpanded && <span className="font-normal truncate">Templates and apps</span>}
-              </div>
-
-              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-                <ShoppingBag className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
-                {sidebarExpanded && <span className="font-normal truncate">Marketplace</span>}
-              </div>
-              
-              <div className="flex items-center gap-3 px-1.5 py-2 rounded-md hover:bg-gray-100 cursor-pointer w-full">
-                <Share className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-gray-800" : "text-gray-400"}`}/>
-                {sidebarExpanded && <span className="font-normal truncate">Import</span>}
-              </div>
-              
-              <button className={`flex items-center justify-center gap-3 px-1.5 py-2 w-full rounded-md cursor-pointer transition-colors ${sidebarExpanded ? "bg-[#1b61c9] text-[#f0f6ff]" : "bg-white hover:bg-gray-100"}`}>
-                <Plus className={`w-3.5 h-3.5 flex-shrink-0 ${sidebarExpanded ? "text-white" : "text-gray-400"}`}/>
-                {sidebarExpanded && <span className="font-normal truncate">Create</span>}
-              </button>
-            </div>
-          </div>
-        </aside>
+        />
 
         {/* Main content */}
         <main className="flex-1 bg-[#f9fafb] min-h-0 overflow-auto">
@@ -178,7 +242,8 @@ export default function HomePage() {
                 <p className="text-left font-normal text-gray-500 text-[12.5px] mb-2">Easily migrate existing projects in just a few minutes.</p>
               </button>
 
-              <button className="flex flex-col h-19 w-110 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
+              <button onClick={() => handleCreateBase()}
+                      className="flex flex-col h-19 w-110 bg-white border px-4 py-3 gap-1.5 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
                 <div className="flex items-center gap-1.5">
                   <TableProperties className="w-4 h-4 text-[#3b66a3]" />
                   <p className="font-medium">Build an app on your own</p>
@@ -218,9 +283,41 @@ export default function HomePage() {
                 </div>
               </div>
 
-            <button className="flex items-center justify-center h-15 w-60 bg-white border px-4 py-3 mt-7 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer">
-              <p className="font-normal">Base placeholder</p>
-            </button>
+
+              {!isLoaded || isBaseLoading ? (
+                <div className="flex flex-1 items-center justify-center min-h-[400px]">
+                  <LoadingState text="Loading your base"/>
+                </div>
+              ) : (
+                bases.length === 0 ? (
+                  <div className="flex flex-1 items-center jusitfy-center text-[12.5px] min-h-[400px]">
+                    <div className="flex flex-col">
+                      <h2 className="text-[17px] font-normal">You havent&apos;t opened anything recently</h2>
+                      <p className=" text-gray-700">Apps that you have recently opened will appear here.</p>
+                      <button className="mt-3 px-2 py-1 bg-white border border-gray-200 hover:shadow-lg cursor-pointer">
+                        Go to all workspaces
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-3">
+                    {bases.map((base) => (
+                      <button
+                        key={base.id}
+                        className="flex flex-row w-70 h-20 bg-white border p-3 gap-3 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer"
+                      >
+                        <div className="flex items-center justify-center bg-gray text-white rounded-md w-48 h-48">
+                          <span>{base.name}</span>
+                        </div>
+                        <div className="flex flex-col items-center gap-1.5">
+                          <Database className="w-4 h-4 text-[#1f8881]" />
+                          <p className="text-[10px]">open just now</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
 
             </div>
           </div>
