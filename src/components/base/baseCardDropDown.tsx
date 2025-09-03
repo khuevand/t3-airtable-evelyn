@@ -32,7 +32,7 @@ export const BaseDropdown: React.FC<BaseDropdownProps> = ({
   const handleRenameBase = (e: React.MouseEvent) => {
     e.stopPropagation();
     const newName = prompt("Enter new base name:");
-    if (newName && newName.trim()) {
+    if (newName?.trim()) {
       onRename(baseId, newName.trim());
     }
     onClose();
