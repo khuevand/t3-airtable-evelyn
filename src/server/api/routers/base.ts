@@ -6,6 +6,7 @@ import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
 export const baseRouter = createTRPCRouter({
   getBaseByUserId: privateProcedure
     .query(async ({ctx}) => {
+      console.log("User in context:", ctx.currentUser);
       const user = ctx.currentUser.id;
       if(!user){
         throw new TRPCError({code: "UNAUTHORIZED"});

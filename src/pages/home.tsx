@@ -10,6 +10,8 @@ import {
   Sparkles,
   TableProperties,
   Database,
+  Star,
+  Ellipsis,
   ChevronDown
 } from "lucide-react";
 import Image from "next/image";
@@ -17,9 +19,12 @@ import { useUser } from "@clerk/nextjs";
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from 'next/link';
-import { ProfileMenu } from "~/components/profileMenu";
-import { Sidebar } from "~/components/sideBar";
+import { ProfileMenu } from "~/components/base/profileMenu";
+import { Sidebar } from "~/components/base/sideBar";
 import LoadingState from "~/components/loadingState";
+import stringToColor from "~/components/base/encodeBaseColor";
+import { BaseDropdown } from "~/components/base/baseCardDropDown";
+import { formatDistanceToNowStrict  } from 'date-fns';
 import { api } from "~/utils/api";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "react-toastify";
@@ -28,7 +33,7 @@ export default function HomePage() {
   const [isSideBarOpen, setSideBarOpen] = useState(false);
   const [isSideBarOpenHover, setSideBarOpenHover] = useState(false);
   const [isbaseTimeSelection, setBaseTimeSelection] = useState(false);
-  const [isCreateBase, setCreateBase] = useState(true);
+  const [isBaseDropDownMenu, setBaseDropDownMenu] = useState(false);
   const [confirmActiveBaseId, setActiveBaseId] = useState<string | null>(null);
   const [confirmDeleteBaseId, setDeleteBaseId] = useState<string | null>(null);
 
@@ -59,8 +64,6 @@ export default function HomePage() {
         if (!old) return [optimisticBase];
         return [optimisticBase, ...old];
       });
-      void router.push(`/${optimisticBase.id}`);
-      setCreateBase(false);
       return {prevBase, optimisticBase};
     },
 
@@ -69,7 +72,6 @@ export default function HomePage() {
         utils.base.getBaseByUserId.setData(undefined, ctx.prevBase);
       }
       void router.push("/");
-      setCreateBase(false);
       toast.error("Failed to create base. Please try again");
     },
 
@@ -92,7 +94,6 @@ export default function HomePage() {
         })
       });
       if (ctx.optimisticBase.id !== data.base.id){
-        void router.push(`/${data.base.id}`);
       }
       toast.success("Create base successfully!");
     },
@@ -134,8 +135,42 @@ export default function HomePage() {
     },
   })
 
+  const renameBase = api.base.renameBase.useMutation({
+    onMutate: async({baseId, baseName}) => {
+      await utils.base.getBaseByUserId.cancel();
+      const prevBase = utils.base.getBaseByUserId.getData()
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+      utils.base.getBaseByUserId.setData(undefined, (old) => {
+        if (!old) return old;
+        return old.map((b) => {
+          if (b.id === baseId) {
+            return { ...b, name: baseName };
+          }
+          return b;
+        });
+      });
+      return {prevBase};
+    },
+
+    onError: (_err, _variables, ctx) => {
+      if (ctx?.prevBase) {
+        utils.base.getBaseByUserId.setData(undefined, ctx.prevBase);
+      }
+      toast.error("Error in renaming");
+    },
+
+    onSuccess: () => {
+      toast.success("Rename succeed!");
+    },
+
+    onSettled: async () => {
+      await utils.base.getBaseByUserId.invalidate();
+    },
+  })
+
   const handleCreateBase = () => {
-    setCreateBase(true);
     createBase.mutate({name: "Untitled Base"});
   }
 
@@ -143,6 +178,10 @@ export default function HomePage() {
     setDeleteBaseId(baseId);
     deleteBase.mutate({ baseId });
   };
+
+  const handleRenameBase = (baseId: string, baseName: string) => {
+    renameBase.mutate({baseId, baseName});
+  }
 
   return(
     <div className='h-screen flex flex-col bg-white'>
@@ -290,29 +329,72 @@ export default function HomePage() {
                 </div>
               ) : (
                 bases.length === 0 ? (
-                  <div className="flex flex-1 items-center jusitfy-center text-[12.5px] min-h-[400px]">
-                    <div className="flex flex-col">
-                      <h2 className="text-[17px] font-normal">You havent&apos;t opened anything recently</h2>
-                      <p className=" text-gray-700">Apps that you have recently opened will appear here.</p>
-                      <button className="mt-3 px-2 py-1 bg-white border border-gray-200 hover:shadow-lg cursor-pointer">
+                  <div className="flex flex-1 items-center jusitfy-center text-[13px] min-h-[400px]">
+                    <div className="mt-42 flex flex-col w-full items-center gap-1.5">
+                      <h2 className="text-[21px] text-gray-900 font-normal">You haven&apos;t opened anything recently</h2>
+                      <p className=" text-gray-600">Apps that you have recently opened will appear here.</p>
+                      <button className="mt-4 px-3.5 py-1.5 bg-white border border-slate-300 rounded-lg hover:shadow-lg cursor-pointer">
                         Go to all workspaces
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-3">
+                  <div className="grid grid-cols-5 ">
                     {bases.map((base) => (
                       <button
                         key={base.id}
-                        className="flex flex-row w-70 h-20 bg-white border p-3 gap-3 text-[15.5px] border-gray-300 shadow-xs rounded-lg hover:shadow-lg cursor-pointer"
+                        className="relative flex flex-row items-center mt-5 w-85 h-24 bg-white border p-3 gap-5 text-[15.5px] border-gray-300 box-shadow shadow-xs rounded-md hover:shadow-lg cursor-pointer"
+                        onClick={() => router.push(`/${base.id}`)}
+                        onMouseEnter={() => {setActiveBaseId(base.id);
+                                            if (confirmActiveBaseId !== base.id) {
+                                              setBaseDropDownMenu(false);
+                                            }
+                        }}
+                        onMouseLeave={() => setActiveBaseId(null)}
                       >
-                        <div className="flex items-center justify-center bg-gray text-white rounded-md w-48 h-48">
-                          <span>{base.name}</span>
+                        <div className="flex items-center justify-center w-14 h-14 ml-2 rounded-xl text-[20px] text-white font-bold"
+                              style={{ backgroundColor: stringToColor(base.id) }}> 
+                          {base.name.slice(0, 2).toUpperCase()}
                         </div>
-                        <div className="flex flex-col items-center gap-1.5">
-                          <Database className="w-4 h-4 text-[#1f8881]" />
-                          <p className="text-[10px]">open just now</p>
+                        <div className="flex flex-col text-gray-600 text-left gap-1">
+                          <p className="text-[12.5px] font-semibold">{base.name}</p>
+                          {confirmActiveBaseId === base.id ? (
+                            <div className="flex items-center text-[11px] gap-1.5">
+                              <Database className="w-3 h-3 " />
+                              <span>Database</span>
+                            </div>
+                          ) : (
+                            <div className="text-[11px]">
+                              {new Date(base.updatedAt).getTime() > Date.now() - 60000
+                                ? 'Opened just now' 
+                                : `Opened ${formatDistanceToNowStrict(new Date(base.updatedAt))} ago`
+                              }
+                            </div>  
+                          )}
                         </div>
+                        {confirmActiveBaseId === base.id && (
+                          <div className="absolute top-4.5 right-3 flex items-center text-gray-700 space-x-1">
+                            <div className="p-1.5 border border-gray-300 rounded-lg bg-white">
+                              <Star className="w-3.5 h-3.5 text-gray-700 font-light"/>
+                            </div>
+                            <div className="relative">
+                              <button className="p-1.5 rounded-lg border border-gray-300 bg-white cursor-pointer"
+                                      onClick={(e) => {e.stopPropagation();
+                                                    setBaseDropDownMenu(!isBaseDropDownMenu)}}>
+                                <Ellipsis className="w-3.5 h-3.5 text-gray-700 font-light"/>
+                              </button>
+                              {isBaseDropDownMenu && (
+                                <BaseDropdown
+                                  baseId={base.id}
+                                  onDelete={handleDeleteBase}
+                                  onRename={handleRenameBase}
+                                  onClose={() => setBaseDropDownMenu(false)}
+                                />
+                              )}
+                            </div>
+    
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>

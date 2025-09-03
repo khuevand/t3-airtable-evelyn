@@ -57,38 +57,38 @@ const createInnerTRPCContext = (_opts: CreateContextOptions) => {
 export const createTRPCContext = async ({ req }: CreateNextContextOptions) => {
   const { userId } = getAuth(req);
   
-  let currentUser = null;
+  let currentUser: { id: string } | null = null;
   
   if (userId) {
     try {
-      // Fetch full user object from Clerk
-      currentUser = await (await clerkClient()).users.getUser(userId);
+      const clerkUser = await (await clerkClient()).users.getUser(userId);
       
-      // Try to sync user to database
-      const email = currentUser.primaryEmailAddress?.emailAddress ??
-                   currentUser.emailAddresses?.[0]?.emailAddress ??
+      const email = clerkUser.primaryEmailAddress?.emailAddress ??
+                   clerkUser.emailAddresses?.[0]?.emailAddress ??
                    "";
       
       if (email) {
         await db.user.upsert({
-          where: { id: currentUser.id },
+          where: { id: clerkUser.id },
           update: {
             email: email,
-            name: currentUser.firstName ?? "",
+            name: clerkUser.firstName ?? "",
           },
           create: {
-            id: currentUser.id,
+            id: clerkUser.id,
             email: email,
-            name: currentUser.firstName ?? "",
+            name: clerkUser.firstName ?? "",
           }
         });
       }
+      
+      currentUser = { id: clerkUser.id };
+      
     } catch (error) {
       console.error("Failed to fetch user or sync to database:", error);
       
-      // If we can't fetch from Clerk or sync to DB, create minimal user object
       if (userId) {
-        currentUser = { id: userId }; // Minimal fallback
+        currentUser = { id: userId };
       }
     }
   }
@@ -98,6 +98,8 @@ export const createTRPCContext = async ({ req }: CreateNextContextOptions) => {
     currentUser,
   };
 };
+
+
 /**
  * 2. INITIALIZATION
  *
