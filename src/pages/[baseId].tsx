@@ -10,51 +10,40 @@ import {
   Grid2X2
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import { api } from "~/utils/api";
+import { useReactTable, getCoreRowModel, flexRender} from '@tanstack/react-table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { v4 as uuidv4 } from "uuid";
+import { toast } from "react-toastify";
 import { ProfileMenu } from "~/components/base/profileMenu";
 import stringToColor from "~/components/base/encodeBaseColor";
-import { v4 as uuidv4 } from "uuid";
 import LoadingState from "~/components/loadingState";
-import { toast } from "react-toastify";
+import PageLoading from "~/components/pageLoading";
+
 export default function BasePage(){
   const router = useRouter();
   const utils = api.useUtils();
   const { user, isLoaded, isSignedIn } = useUser();
   const { baseId } = router.query;
   const baseIdString = Array.isArray(baseId) ? baseId[0] : baseId;
+  
   const [isHomeIconHover, setHomeIconHover] = useState(false);
   const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined); 
 
   const {data: baseData,
         isLoading: isBaseLoading,
-  } = api.base.getBaseById.useQuery({baseId: baseIdString as string}, {enabled: !!baseId})
+  } = api.base.getBaseById.useQuery({baseId: baseIdString as string}, {enabled: !!baseIdString})
 
   const {data: tableData,
       isLoading: isTableLoading,
-  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString as string}, {enabled: !!baseId})
+  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString as string}, {enabled: !!baseIdString})
   
-  if (!baseIdString){
-    return <LoadingState text="Loading base"/>
-  }
-
-  useEffect(() => {
-    if (isTableLoading) {
-      return;
-    }
-
-    if (!tableData || tableData.length === 0) {
-      setActiveTableId(undefined);
-    } else {
-      setActiveTableId(tableData?.[0]?.id ?? undefined);
-    }
-  }, [tableData, isTableLoading]);
-
-  if (isTableLoading){
-    return <LoadingState text="Loading table"/>
-  }
+  const {data: activeTableData,
+       isLoading: isActiveTableLoading,
+  } = api.table.getTableById.useQuery({tableId: activeTableId as string}, {enabled: !!activeTableId});
   
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
@@ -184,6 +173,46 @@ export default function BasePage(){
     }
   });
 
+  useEffect(() => {
+    if (isTableLoading) {
+      return;
+    }
+
+    if (!tableData || tableData.length === 0) {
+      setActiveTableId(undefined);
+    } else {
+      setActiveTableId(tableData?.[0]?.id ?? undefined);
+    }
+  }, [tableData, isTableLoading]);
+
+  // if (isTableLoading){
+  //   return <LoadingState text="Loading table"/>
+  // }
+
+  const memorizedColumns = useMemo((): ColumnDef<any>[] => {
+    if (!activeTableData || !activeTableData.column) return [];
+    return activeTableData.column.map((col) => ({
+      accessorKey: col.id,
+      header: col.name,
+      cell: ({ row }: { row: any }) => {
+        const cellData = row.original.cell?.find((cell: any) => cell.columnId === col.id);
+        return cellData?.stringVal || cellData?.intVal?.toString() || "";
+      }
+    }));
+  }, [activeTableData]);
+
+  const tableDataRows = useMemo(() => {
+    if (!activeTableData?.row) return [];
+      return activeTableData.row;
+  }, [activeTableData]);
+
+  const table = useReactTable({
+    data: tableDataRows,
+    columns: memorizedColumns,
+    getCoreRowModel: getCoreRowModel(),
+  });
+  
+
   const handleCreateTable = (baseId: string) => {
     createTable.mutate({ baseId });
   }
@@ -243,7 +272,7 @@ export default function BasePage(){
         <header className="flex items-center justify-between p-3 border-b border-gray-200">
           <div className="flex items-center gap-2">
             <div className="p-1 border border-gray-200 rounded-lg"
-                  style={{ backgroundColor: stringToColor(baseIdString)}}>
+                  style={{ backgroundColor: stringToColor(baseIdString ? stringToColor(baseIdString) : 'hsl(0, 70%, 50%)')}}>
               <Image src="/airtable.png" alt="Logo" width={22} height={22}/>
             </div>
             <span className="text-[17px] font-bold">{baseData?.name}</span>
@@ -298,7 +327,49 @@ export default function BasePage(){
           </div>
 
           <div className="flex-1 bg-slate-100">
-
+            <div className="flex-1 bg-slate-100 p-4">
+              {isActiveTableLoading ? (
+                <LoadingState text="Loading table data..." />
+              ) : (
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      {table.getHeaderGroups().map(headerGroup => (
+                        <tr key={headerGroup.id}>
+                          {headerGroup.headers.map(header => (
+                            <th
+                              key={header.id}
+                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            >
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext()
+                                  )}
+                            </th>
+                          ))}
+                        </tr>
+                      ))}
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {table.getRowModel().rows.map(row => (
+                        <tr key={row.id}>
+                          {row.getVisibleCells().map(cell => (
+                            <td
+                              key={cell.id}
+                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
+                            >
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </main>
       </div>

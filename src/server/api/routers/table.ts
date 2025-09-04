@@ -92,7 +92,11 @@ export const tableRouter = createTRPCRouter({
     .input(z.object({tableId: z.string()}))
     .query(async ({ctx, input}) => {
       const table = await ctx.db.table.findUnique({
-        where: {id: input.tableId}
+        where: {id: input.tableId},
+        include: {
+          column: true,
+          row: true,
+        }
       })
       return table;
     }
