@@ -34,7 +34,12 @@ import {
   ChevronRight
 } from "lucide-react";
 
-export const ProfileMenu = () => {
+interface ProfileMenuProps {
+  isBasePage: boolean
+}
+export const ProfileMenu = ({
+  isBasePage
+}: ProfileMenuProps) => {
   const { user } = useUser();
   const [isProfileMenuOpen, setProfileMenuOpen] = useState(false);
   const toggleMenu = () => setProfileMenuOpen(!isProfileMenuOpen);
@@ -58,7 +63,7 @@ export const ProfileMenu = () => {
       </button>
 
       {isProfileMenuOpen && (
-        <div className="absolute right-0 z-10 w-75 rounded-lg text-[13px] text-gray-800 bg-white shadow-lg border border-gray-300 ring-opacity-1">
+        <div className={`absolute ${isBasePage ? "bottom-0 left-7" : "right-0" } z-10 w-75 rounded-lg text-[13px] text-gray-800 bg-white shadow-lg border border-gray-300 ring-opacity-1`}>
           <div className='px-5 py-4'>
             <p className='font-medium mb-0.5'>{user?.fullName}</p>
             <p className=''>{user?.primaryEmailAddress?.emailAddress}</p>

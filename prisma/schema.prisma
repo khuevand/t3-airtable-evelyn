@@ -11,15 +11,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model Post {
-    id        Int      @id @default(autoincrement())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    @@index([name])
-}
-
 model User {
     id String @id
     email String @unique
@@ -35,9 +26,65 @@ model Base {
     name String
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
+    table Table[]
+    tableSequence Int @default(1)
     user User @relation(fields: [userId], references: [id], onDelete: Cascade)
     userId String
 
     @@index([id])
     @@index([userId])
+}
+
+model Table {
+  id String @id @default(cuid())
+  name String
+  column Column[]
+  row Row[]
+  columnSequence Int @default(5)
+  createdAt DateTime @default(now())
+  base Base @relation(fields: [baseId], references: [id], onDelete: Cascade)
+  baseId String
+
+  @@index([id])
+  @@index([baseId])
+}
+
+model Column {
+  id String @id @default(cuid())
+  name String
+  stringVal Boolean @default(true)
+  intVal Boolean @default(false)
+  order Int
+  createdAt DateTime @default(now())
+  table Table @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  tableId String
+  visible Boolean @default(true)
+  cell Cell[]
+
+  @@index([id])
+  @@index([tableId])
+}
+
+model Row {
+  id String @id @default(cuid())
+  createdAt DateTime @default(now())
+  table Table @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  tableId String
+  cell Cell[]
+
+  @@index([id])
+  @@index([tableId])
+}
+
+model Cell {
+  id String @id @default(cuid())
+  stringVal String?
+  intVal Int?
+  column Column @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  row Row @relation(fields: [rowId], references: [id], onDelete: Cascade)
+  columnId String
+  rowId String
+
+  @@index([id])
+  @@index([columnId, rowId])
 }

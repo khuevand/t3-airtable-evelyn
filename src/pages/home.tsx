@@ -57,6 +57,7 @@ export default function HomePage() {
         name: "Untitled Base",
         createdAt: new Date(),
         updatedAt: new Date(),
+        tableSequence: 1,
         userId: user.id,
       }
 
@@ -88,6 +89,7 @@ export default function HomePage() {
               userId: user?.id ?? "",
               createdAt: new Date(),
               updatedAt: new Date(),
+              tableSequence: 1,
             }
           }
           return base;
@@ -229,7 +231,7 @@ export default function HomePage() {
           >
             <Bell className="w-4 h-4"></Bell>
           </button>
-          <ProfileMenu/>
+          <ProfileMenu isBasePage={false}/>
         </div>
       </section>
 
@@ -353,7 +355,7 @@ export default function HomePage() {
                         onMouseLeave={() => setActiveBaseId(null)}
                       >
                         <div className="flex items-center justify-center w-14 h-14 ml-2 rounded-xl text-[20px] text-white font-bold"
-                              style={{ backgroundColor: stringToColor(base.id) }}> 
+                              style={{ backgroundColor: stringToColor(base.id)}}> 
                           {base.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div className="flex flex-col text-gray-600 text-left gap-1">
@@ -392,7 +394,6 @@ export default function HomePage() {
                                 />
                               )}
                             </div>
-    
                           </div>
                         )}
                       </button>

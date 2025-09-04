@@ -1,12 +1,10 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-// import { clerkClient, currentUser, getAuth } from "@clerk/nextjs/server";
 import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
 
 export const baseRouter = createTRPCRouter({
   getBaseByUserId: privateProcedure
     .query(async ({ctx}) => {
-      console.log("User in context:", ctx.currentUser);
       const user = ctx.currentUser.id;
       if(!user){
         throw new TRPCError({code: "UNAUTHORIZED"});
@@ -33,10 +31,42 @@ export const baseRouter = createTRPCRouter({
           name: name,
           userId: user,
         }
-
       })
+      const tableName = `Table ${base.tableSequence}`;
+      const defaultColumn = [
+        { name: "Name", order: 0 },
+        { name: "Notes", order: 1 },
+        { name: "Assignee", order: 2 },
+        { name: "Status", order: 3 },
+        { name: "Attachments", order: 4 },
+      ];
+      const table = await ctx.db.table.create({
+        data: {
+          name: tableName,
+          baseId: base.id,
+          column: { create: defaultColumn,}
+        },
+        include: {
+          column: true,
+        }
+      });
+
+      for (let i = 0; i < 3; i++ ){
+        await ctx.db.row.create({
+          data: {
+            tableId: table.id,
+            cell: {
+              create: table.column.map((col) => ({
+                columnId: col.id,
+                stringVal: ""
+              }))
+            }
+          }
+        })
+      };
       return{
-        base
+        base,
+        table
       }
     }
   ),
@@ -54,13 +84,22 @@ export const baseRouter = createTRPCRouter({
           userId: user,
         },
       })
-      return{
+      return {
         success: count > 0,
         baseId: input.baseId,
         alreadyDeleted: true,
       }
     }
   ),
+
+  getBaseById: privateProcedure
+    .input(z.object({baseId: z.string()}))
+    .query(async ({ctx, input}) => {
+      const base = await ctx.db.base.findUnique({
+        where: {id: input.baseId}
+      })
+      return base;
+    }),
 
   renameBase: privateProcedure
     .input(z.object({baseName: z.string(), baseId: z.string()}))
@@ -79,7 +118,6 @@ export const baseRouter = createTRPCRouter({
       return{
         success: count > 0,
         baseId: input.baseId,
-        alreadyDeleted: true,
       }
     })
 });
