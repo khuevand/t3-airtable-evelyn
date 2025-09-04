@@ -21,47 +21,50 @@ import { toast } from "react-toastify";
 import { ProfileMenu } from "~/components/base/profileMenu";
 import stringToColor from "~/components/base/encodeBaseColor";
 import LoadingState from "~/components/loadingState";
-// import PageLoading from "~/components/pageLoading";
 
+// Type definitions matching Prisma schema
 interface Cell {
   columnId: string;
-  stringVal?: string;
-  intVal?: number;
+  stringVal?: string | null;
+  intVal?: number | null;
 }
 
 interface Row {
   id: string;
-  cell?: Cell[];
+  createdAt: Date;
+  tableId: string;
+  cell: Cell[];
+}
+
+interface Column {
+  id: string;
+  name: string;
+}
+
+interface TableData {
+  id: string;
+  column: Column[];
+  row: Row[];
 }
 
 export default function BasePage(){
   const router = useRouter();
   const utils = api.useUtils();
-  const { user, isLoaded, isSignedIn } = useUser();
+  const { } = useUser();
   const { baseId } = router.query;
   const baseIdString = Array.isArray(baseId) ? baseId[0] : baseId;
   
   const [isHomeIconHover, setHomeIconHover] = useState(false);
   const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined); 
 
-  const {data: baseData,
-        isLoading: isBaseLoading,
-  } = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+  const {data: baseData} = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
 
-  const {data: tableData,
-      isLoading: isTableLoading,
-  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+  const {data: tableData, isLoading: isTableLoading} = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
   
-  const {data: activeTableData,
-       isLoading: isActiveTableLoading,
-  } = api.table.getTableById.useQuery({tableId: activeTableId as string}, {enabled: !!activeTableId});
+  const {data: activeTableData, isLoading: isActiveTableLoading} = api.table.getTableById.useQuery({tableId: activeTableId!}, {enabled: !!activeTableId});
   
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
-      if (!user?.id) {
-        throw new Error("User not authenticated");
-      }
-      
       await utils.base.getBaseById.cancel({baseId});
       const prevBase = utils.base.getBaseById.getData();
       const optimisticTable = {
@@ -78,7 +81,7 @@ export default function BasePage(){
         createdAt: new Date(),
         updatedAt: new Date(),
         tableSequence: 1,
-        userId: user?.id,
+        userId: "exampleUserId",
         table: [optimisticTable],
       }
 
@@ -154,10 +157,10 @@ export default function BasePage(){
 
   const deleteRow = api.row.deleteRow.useMutation({
     onSuccess: () => {
-      toast.success("Row created successfully!");
+      toast.success("Row deleted successfully!");
     },
     onError: () => {
-      toast.error("Error creating row.");
+      toast.error("Error deleting row.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
@@ -166,10 +169,10 @@ export default function BasePage(){
 
   const addColumn = api.column.createColumn.useMutation({
     onSuccess: () => {
-      toast.success("Row created successfully!");
+      toast.success("Column created successfully!");
     },
     onError: () => {
-      toast.error("Error creating row.");
+      toast.error("Error creating column.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
@@ -178,10 +181,10 @@ export default function BasePage(){
 
   const deleteColumn = api.column.deleteColumn.useMutation({
     onSuccess: () => {
-      toast.success("Row created successfully!");
+      toast.success("Column deleted successfully!");
     },
     onError: () => {
-      toast.error("Error creating row.");
+      toast.error("Error deleting column.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
@@ -200,19 +203,15 @@ export default function BasePage(){
     }
   }, [tableData, isTableLoading]);
 
-  // if (isTableLoading){
-  //   return <LoadingState text="Loading table"/>
-  // }
-
-  const memorizedColumns = useMemo((): ColumnDef<any>[] => {
-    if (!activeTableData || !activeTableData.column) return [];
+  const memorizedColumns = useMemo(() => {
+    if (!activeTableData?.column) return [];
     return activeTableData.column.map((col) => ({
-      accessorKey: col.id,
-      header: col.name,
-      cell: ({ row }: { row: any }) => {
-        const cellData = row.original.cell?.find((cell: any) => cell.columnId === col.id);
+      id: col.id,
+      accessorFn: (row: Row) => {
+        const cellData = row.cell?.find((cell) => cell.columnId === col.id);
         return cellData?.stringVal ?? cellData?.intVal?.toString() ?? "";
-      }
+      },
+      header: col.name,
     }));
   }, [activeTableData]);
 
@@ -222,35 +221,10 @@ export default function BasePage(){
   }, [activeTableData]);
 
   const table = useReactTable({
-    data: tableDataRows,
+    data: tableDataRows as Row[],
     columns: memorizedColumns,
     getCoreRowModel: getCoreRowModel(),
   });
-  
-
-  const handleCreateTable = (baseId: string) => {
-    createTable.mutate({ baseId });
-  }
-
-  const handleDeleteTable = (baseId: string, tableId: string) => {
-    deleteTable.mutate({ baseId, tableId });
-  }
-
-  const handleAddRow = (tableId: string) => {
-    addRow.mutate({tableId});
-  }
-
-  const handleDeleteRow = (rowId: string) => {
-    deleteRow.mutate({rowId});
-  }
-
-  const handleCreateColumn = (tableId: string, name: string, stringVal: boolean, intVal: boolean) =>{
-    addColumn.mutate({tableId, name, stringVal, intVal});
-  }
-
-  const handleDeleteColumn = (tableId: string, columnId: string) => {
-    deleteColumn.mutate({tableId, columnId});
-  }
 
   return (
     <div className="flex h-screen">
@@ -316,8 +290,79 @@ export default function BasePage(){
           </div>
         </header>
 
-        <section className="border-b border-gray-200 py-4 bg-pink-100">
-
+        <section className="border-b border-gray-200 py-6 bg-white">
+          <div className="flex items-center gap-2 px-4">
+            <h3 className="text-sm font-medium text-gray-700">Row Controls:</h3>
+            <button 
+              onClick={() => activeTableId && addRow.mutate({ tableId: activeTableId })}
+              disabled={!activeTableId || addRow.isPending}
+              className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+            >
+              {addRow.isPending ? 'Adding...' : 'Add Row'}
+            </button>
+            <button 
+              onClick={() => {
+                const firstRow = tableDataRows[0];
+                if (firstRow) {
+                  deleteRow.mutate({ rowId: firstRow.id });
+                }
+              }}
+              disabled={!tableDataRows.length || deleteRow.isPending}
+              className="px-3 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
+            >
+              {deleteRow.isPending ? 'Deleting...' : 'Delete First Row'}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 px-4 mt-2">
+            <h3 className="text-sm font-medium text-gray-700">Column Controls:</h3>
+            <button 
+              onClick={() => {
+                if (activeTableId) {
+                  addColumn.mutate({ 
+                    tableId: activeTableId, 
+                    name: `Column ${Date.now()}`, 
+                    stringVal: true, 
+                    intVal: false 
+                  });
+                }
+              }}
+              disabled={!activeTableId || addColumn.isPending}
+              className="px-3 py-1 text-xs bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
+            >
+              {addColumn.isPending ? 'Adding...' : 'Add String Column'}
+            </button>
+            <button 
+              onClick={() => {
+                if (activeTableId) {
+                  addColumn.mutate({ 
+                    tableId: activeTableId, 
+                    name: `Number ${Date.now()}`, 
+                    stringVal: false, 
+                    intVal: true 
+                  });
+                }
+              }}
+              disabled={!activeTableId || addColumn.isPending}
+              className="px-3 py-1 text-xs bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:opacity-50"
+            >
+              {addColumn.isPending ? 'Adding...' : 'Add Number Column'}
+            </button>
+            <button 
+              onClick={() => {
+                const firstColumn = activeTableData?.column[0];
+                if (activeTableId && firstColumn) {
+                  deleteColumn.mutate({ 
+                    tableId: activeTableId, 
+                    columnId: firstColumn.id 
+                  });
+                }
+              }}
+              disabled={!activeTableData?.column.length || deleteColumn.isPending}
+              className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+            >
+              {deleteColumn.isPending ? 'Deleting...' : 'Delete First Column'}
+            </button>
+          </div>
         </section>
 
         <section className="border-b border-gray-200 py-6 bg-white">
