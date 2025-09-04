@@ -21,7 +21,18 @@ import { toast } from "react-toastify";
 import { ProfileMenu } from "~/components/base/profileMenu";
 import stringToColor from "~/components/base/encodeBaseColor";
 import LoadingState from "~/components/loadingState";
-import PageLoading from "~/components/pageLoading";
+// import PageLoading from "~/components/pageLoading";
+
+interface Cell {
+  columnId: string;
+  stringVal?: string;
+  intVal?: number;
+}
+
+interface Row {
+  id: string;
+  cell?: Cell[];
+}
 
 export default function BasePage(){
   const router = useRouter();
@@ -35,11 +46,11 @@ export default function BasePage(){
 
   const {data: baseData,
         isLoading: isBaseLoading,
-  } = api.base.getBaseById.useQuery({baseId: baseIdString as string}, {enabled: !!baseIdString})
+  } = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
 
   const {data: tableData,
       isLoading: isTableLoading,
-  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString as string}, {enabled: !!baseIdString})
+  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
   
   const {data: activeTableData,
        isLoading: isActiveTableLoading,
@@ -47,6 +58,10 @@ export default function BasePage(){
   
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+      
       await utils.base.getBaseById.cancel({baseId});
       const prevBase = utils.base.getBaseById.getData();
       const optimisticTable = {
@@ -63,7 +78,7 @@ export default function BasePage(){
         createdAt: new Date(),
         updatedAt: new Date(),
         tableSequence: 1,
-        userId: "exampleUserId",
+        userId: user?.id,
         table: [optimisticTable],
       }
 
@@ -196,7 +211,7 @@ export default function BasePage(){
       header: col.name,
       cell: ({ row }: { row: any }) => {
         const cellData = row.original.cell?.find((cell: any) => cell.columnId === col.id);
-        return cellData?.stringVal || cellData?.intVal?.toString() || "";
+        return cellData?.stringVal ?? cellData?.intVal?.toString() ?? "";
       }
     }));
   }, [activeTableData]);
