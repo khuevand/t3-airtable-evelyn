@@ -10,17 +10,17 @@ export const rowRouter = createTRPCRouter({
       });
 
       const createCells = columns.map((col) => {
-        let StringVal = null;
+        let stringVal = null;
         let intVal = null;
         if (col.stringVal){
-          StringVal = "";
+          stringVal = "";
         }
         else if (col.intVal){
           intVal = null;
         }
         return {
           columnId: col.id,
-          StringVal,
+          stringVal,
           intVal,
         }
       });

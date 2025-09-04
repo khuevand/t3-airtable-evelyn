@@ -95,8 +95,7 @@ export default function HomePage() {
           return base;
         })
       });
-      if (ctx.optimisticBase.id !== data.base.id){
-      }
+
       toast.success("Create base successfully!");
     },
 

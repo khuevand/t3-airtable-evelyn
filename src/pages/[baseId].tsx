@@ -10,26 +10,202 @@ import {
   Grid2X2
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import { api } from "~/utils/api";
 import { ProfileMenu } from "~/components/base/profileMenu";
 import stringToColor from "~/components/base/encodeBaseColor";
+import { v4 as uuidv4 } from "uuid";
 import LoadingState from "~/components/loadingState";
+import { toast } from "react-toastify";
 export default function BasePage(){
   const router = useRouter();
+  const utils = api.useUtils();
   const { user, isLoaded, isSignedIn } = useUser();
   const { baseId } = router.query;
   const baseIdString = Array.isArray(baseId) ? baseId[0] : baseId;
   const [isHomeIconHover, setHomeIconHover] = useState(false);
+  const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined); 
 
   const {data: baseData,
         isLoading: isBaseLoading,
   } = api.base.getBaseById.useQuery({baseId: baseIdString as string}, {enabled: !!baseId})
 
+  const {data: tableData,
+      isLoading: isTableLoading,
+  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString as string}, {enabled: !!baseId})
+  
   if (!baseIdString){
     return <LoadingState text="Loading base"/>
+  }
+
+  useEffect(() => {
+    if (isTableLoading) {
+      return;
+    }
+
+    if (!tableData || tableData.length === 0) {
+      setActiveTableId(undefined);
+    } else {
+      setActiveTableId(tableData?.[0]?.id ?? undefined);
+    }
+  }, [tableData, isTableLoading]);
+
+  if (isTableLoading){
+    return <LoadingState text="Loading table"/>
+  }
+  
+  const createTable = api.table.createTable.useMutation({
+    onMutate: async({ baseId }) => {
+      await utils.base.getBaseById.cancel({baseId});
+      const prevBase = utils.base.getBaseById.getData();
+      const optimisticTable = {
+        id: uuidv4(),
+        baseId: baseId,
+        name: "",
+        columnSequence: 5, 
+        createdAt: new Date(),
+      }
+
+      const optimisticBase = {
+        id: baseId,
+        name: "Base Name",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        tableSequence: 1,
+        userId: "exampleUserId",
+        table: [optimisticTable],
+      }
+
+      utils.base.getBaseById.setData({baseId}, (old) => {
+        if (!old) return optimisticBase;
+        return {...old, table: [...old.table, optimisticTable]};
+      });
+      return {baseId, prevBase, optimisticTable};
+    },
+
+    onError: (_error, _variables, ctx) => {
+      if (ctx?.prevBase){
+        utils.base.getBaseById.setData({baseId: ctx.baseId}, ctx.prevBase);
+      }
+    },
+
+    onSuccess: (newTable, ctx) => {
+      utils.base .getBaseById.setData({baseId: ctx.baseId}, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          table: [...old.table, newTable]
+        }
+      });
+    },
+
+    onSettled: (ctx) => {
+      void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
+    }
+  });
+
+  const deleteTable = api.table.deleteTable.useMutation({
+    onMutate: async({baseId, tableId}) => {
+      await utils.base.getBaseById.cancel({baseId});
+      const prevBase = utils.base.getBaseById.getData();
+      utils.base.getBaseById.setData({baseId}, (old) => {
+        if (!old) return old;
+        const remainingTable = old.table.filter((t) => t.id != tableId);
+        const fallbackTable = remainingTable[0]?.id ?? undefined;
+        setActiveTableId(fallbackTable);
+        return {...old, table: remainingTable};
+      })
+      return {prevBase, baseId};
+    },
+
+    onError: (_err, _variables, ctx) => {
+      if (ctx?.prevBase) {
+        utils.base.getBaseById.setData({baseId: ctx.baseId}, ctx.prevBase);
+      }
+      toast.error("Error on deleting table");
+    },
+
+    onSuccess: () => {
+      toast.success("Table moved to trash.");
+    },
+
+    onSettled: (_data, _error, _variables, ctx) => {
+      void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
+    }
+  });
+
+  const addRow = api.row.createRow.useMutation({
+    onSuccess: () => {
+      toast.success("Row created successfully!");
+    },
+    onError: () => {
+      toast.error("Error creating row.");
+    },
+    onSettled: () => {
+     void utils.table.getTableById.invalidate({ tableId: activeTableId });
+    }
+  });
+
+  const deleteRow = api.row.deleteRow.useMutation({
+    onSuccess: () => {
+      toast.success("Row created successfully!");
+    },
+    onError: () => {
+      toast.error("Error creating row.");
+    },
+    onSettled: () => {
+     void utils.table.getTableById.invalidate({ tableId: activeTableId });
+    }
+  });
+
+  const addColumn = api.column.createColumn.useMutation({
+    onSuccess: () => {
+      toast.success("Row created successfully!");
+    },
+    onError: () => {
+      toast.error("Error creating row.");
+    },
+    onSettled: () => {
+     void utils.table.getTableById.invalidate({ tableId: activeTableId });
+    }
+  });
+
+  const deleteColumn = api.column.deleteColumn.useMutation({
+    onSuccess: () => {
+      toast.success("Row created successfully!");
+    },
+    onError: () => {
+      toast.error("Error creating row.");
+    },
+    onSettled: () => {
+     void utils.table.getTableById.invalidate({ tableId: activeTableId });
+    }
+  });
+
+  const handleCreateTable = (baseId: string) => {
+    createTable.mutate({ baseId });
+  }
+
+  const handleDeleteTable = (baseId: string, tableId: string) => {
+    deleteTable.mutate({ baseId, tableId });
+  }
+
+  const handleAddRow = (tableId: string) => {
+    addRow.mutate({tableId});
+  }
+
+  const handleDeleteRow = (rowId: string) => {
+    deleteRow.mutate({rowId});
+  }
+
+  const handleCreateColumn = (tableId: string, name: string, stringVal: boolean, intVal: boolean) =>{
+    addColumn.mutate({tableId, name, stringVal, intVal});
+  }
+
+  const handleDeleteColumn = (tableId: string, columnId: string) => {
+    deleteColumn.mutate({tableId, columnId});
   }
 
   return (

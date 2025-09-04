@@ -96,7 +96,10 @@ export const baseRouter = createTRPCRouter({
     .input(z.object({baseId: z.string()}))
     .query(async ({ctx, input}) => {
       const base = await ctx.db.base.findUnique({
-        where: {id: input.baseId}
+        where: {id: input.baseId},
+        include: {
+          table: true, 
+        },
       })
       return base;
     }),
