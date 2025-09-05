@@ -197,66 +197,66 @@ export default function BasePage(){
       toast.error("Error on deleting table");
     },
 
-    onSuccess: () => {
+    onSuccess: (_newTable, _variables, ctx) => {
       toast.success("Table moved to trash.");
+      void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
+      void utils.table.getTableByBaseId.invalidate({baseId: ctx?.baseId});
+      void utils.row.getRowsByOperation.invalidate();
     },
 
     onSettled: (_data, _error, _variables, ctx) => {
       void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
-      void  utils.table.getTableByBaseId.invalidate({baseId: ctx?.baseId});
+      void utils.table.getTableByBaseId.invalidate({baseId: ctx?.baseId});
+      void utils.row.getRowsByOperation.invalidate();
     }
   });
 
   const addRow = api.row.createRow.useMutation({
     onSuccess: () => {
       toast.success("Row created successfully!");
+      void utils.table.getTableById.invalidate({ tableId: activeTableId });
+      void utils.row.getRowsByOperation.invalidate();
     },
     onError: () => {
       toast.error("Error creating row.");
+
     },
-    onSettled: () => {
-     void utils.table.getTableById.invalidate({ tableId: activeTableId });
-    }
   });
 
 
   const deleteRow = api.row.deleteRow.useMutation({
     onSuccess: () => {
       toast.success("Row created successfully!");
+      void utils.table.getTableById.invalidate({ tableId: activeTableId });
+      void utils.row.getRowsByOperation.invalidate();
     },
     onError: () => {
       toast.error("Error creating row.");
     },
-    onSettled: () => {
-     void utils.table.getTableById.invalidate({ tableId: activeTableId });
-    }
   });
 
 
   const addColumn = api.column.createColumn.useMutation({
     onSuccess: () => {
       toast.success("Row created successfully!");
+      void utils.table.getTableById.invalidate({ tableId: activeTableId });
+      void utils.row.getRowsByOperation.invalidate();
     },
     onError: () => {
       toast.error("Error creating row.");
     },
-    onSettled: () => {
-     void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      void utils.row.getRowsByOperation.invalidate();
-    }
   });
 
 
   const deleteColumn = api.column.deleteColumn.useMutation({
     onSuccess: () => {
       toast.success("Row created successfully!");
+      void utils.table.getTableById.invalidate({ tableId: activeTableId });
+      void utils.row.getRowsByOperation.invalidate();
     },
     onError: () => {
       toast.error("Error creating row.");
     },
-    onSettled: () => {
-     void utils.table.getTableById.invalidate({ tableId: activeTableId });
-    }
   });
 
   useEffect(() => {
