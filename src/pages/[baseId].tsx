@@ -25,11 +25,22 @@ import { CreateColumn } from "~/components/table/createColumn";
 import FunctionBar from "~/components/table/functionBar";
 import TableTabs from "~/components/table/tableTab";
 
-interface Cell {
+
+type Cell = {
+  id: string;
+  rowId: string;
   columnId: string;
-  stringVal?: string;
-  intVal?: number;
-}
+  stringVal: string | null;
+  intVal: number | null;
+};
+
+type Row = {
+  id: string;
+  tableId: string;
+  createdAt: string | Date; 
+  cell?: Cell[];   
+  cells?: Cell[];
+};
 
 type CellPrimitive = string | number | null;
 
@@ -84,7 +95,7 @@ export default function BasePage(){
  
   const {data: activeTableData,
        isLoading: isActiveTableLoading,
-  } = api.table.getTableById.useQuery({tableId: activeTableId as string}, {enabled: !!activeTableId});
+  } = api.table.getTableById.useQuery({tableId: activeTableId!}, {enabled: !!activeTableId});
 
   const { data: opRows, isLoading: isRowsLoading } = api.row.getRowsByOperation.useQuery(
     {
@@ -260,8 +271,9 @@ export default function BasePage(){
   }, [tableData, isTableLoading]);
 
   const transformRows = useMemo<FlattenedRow[]>(() => {
-    const src = opRows ?? activeTableData?.row ?? [];
-    return src.map((r: any) => {
+    console.log(opRows);
+    const src: Row[] = opRows ?? activeTableData?.row ?? [];
+    return src.map((r) => {
       const flat: Record<string, CellPrimitive> = {};
       const cells = r.cell ?? r.cells ?? []; 
       for (const c of cells) {
@@ -283,7 +295,7 @@ export default function BasePage(){
       accessorKey: col.id,
       header: col.name,
       cell: ({getValue}) => {
-        const v = getValue() as CellPrimitive;
+        const v = getValue();
         return v === null || v === undefined ? "" : String(v);
       },
     }))
@@ -403,7 +415,7 @@ export default function BasePage(){
         )}
 
         <FunctionBar
-          columns={activeTableData?.column || []}
+          columns={activeTableData?.column ?? []}
           filter={filter}
           sort={sort}
           onFilterChange={setFilter}

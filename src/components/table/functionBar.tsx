@@ -94,7 +94,7 @@ export default function FunctionBar({
                   <label className="text-xs text-gray-600">Column:</label>
                   <select 
                     className="w-full mt-1 p-1 border border-gray-300 rounded text-sm"
-                    value={filter?.columnId || ''}
+                    value={filter?.columnId ?? ''}
                     onChange={(e) => {
                       const columnId = e.target.value;
                       if (columnId) {
