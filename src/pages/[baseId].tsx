@@ -99,7 +99,7 @@ export default function BasePage(){
 
   const { data: opRows, isLoading: isRowsLoading } = api.row.getRowsByOperation.useQuery(
     {
-      tableId: activeTableId as string,
+      tableId: activeTableId!,
       filter: filter ?? undefined,
       sort: sort ?? undefined,
     },
