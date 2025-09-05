@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
+import { faker } from '@faker-js/faker';
 
 export const baseRouter = createTRPCRouter({
   getBaseByUserId: privateProcedure
@@ -58,7 +59,7 @@ export const baseRouter = createTRPCRouter({
             cell: {
               create: table.column.map((col) => ({
                 columnId: col.id,
-                stringVal: ""
+                stringVal: faker.word.words(2),
               }))
             }
           }

@@ -12,7 +12,6 @@ import {
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
-import { faker } from '@faker-js/faker';
 import Image from "next/image";
 import { api } from "~/utils/api";
 import { useReactTable, getCoreRowModel, flexRender} from '@tanstack/react-table';
@@ -38,6 +37,20 @@ type FlattenedRow = {
   id: string;
 } & Record<string, CellPrimitive>;
 
+type FilterType =
+  "is"
+  | "is not"
+  | "contains"
+  | "does not contain"
+  | "is empty"
+  | "is not empty"
+  | "greater than"
+  | "lesser than";
+
+type Filter = { columnId: string; type: FilterType; value?: string | number | null };
+type Sort = { columnId: string; direction: "asc" | "desc" };
+
+
 export default function BasePage(){
   const router = useRouter();
   const utils = api.useUtils();
@@ -51,6 +64,9 @@ export default function BasePage(){
   const [isCreateTable, setCreateTable] = useState(false);
   const [isDeleteTable, setDeleteTable] = useState(false);
 
+  const [filter, setFilter] = useState<Filter | null>(null);
+  const [sort, setSort] = useState<Sort | null>(null);
+
   const [deleteMenu, setDeleteMenu] = useState<{
     type: "row" | "column" | null;
     id?: string;
@@ -60,15 +76,24 @@ export default function BasePage(){
 
   const {data: baseData,
         isLoading: isBaseLoading,
-  } = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+  } = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString});
 
   const {data: tableData,
       isLoading: isTableLoading,
-  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString});
  
   const {data: activeTableData,
        isLoading: isActiveTableLoading,
   } = api.table.getTableById.useQuery({tableId: activeTableId as string}, {enabled: !!activeTableId});
+
+  const { data: opRows, isLoading: isRowsLoading } = api.row.getRowsByOperation.useQuery(
+    {
+      tableId: activeTableId as string,
+      filter: filter ?? undefined,
+      sort: sort ?? undefined,
+    },
+    { enabled: !!activeTableId }
+  );
  
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
@@ -118,13 +143,15 @@ export default function BasePage(){
     },
 
     onSuccess: (_newTable, _variables, ctx) => {
-      utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
-      utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
+      void utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
+      void utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
+      void utils.row.getRowsByOperation.invalidate();
     },
 
     onSettled: (_data, _err, ctx) => {
-      utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
-      utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
+      void utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
+      void utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
+      void utils.row.getRowsByOperation.invalidate();
     },
   });
 
@@ -204,6 +231,7 @@ export default function BasePage(){
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
+      void utils.row.getRowsByOperation.invalidate();
     }
   });
 
@@ -232,18 +260,19 @@ export default function BasePage(){
   }, [tableData, isTableLoading]);
 
   const transformRows = useMemo<FlattenedRow[]>(() => {
-    if (!activeTableData || !activeTableData?.row) {
-      return [];
-    };
-
-    return activeTableData.row.map((r) => {
+    const src = opRows ?? activeTableData?.row ?? [];
+    return src.map((r: any) => {
       const flat: Record<string, CellPrimitive> = {};
-      for (const c of r.cell ?? []){
-        flat[c.columnId] = (c.stringVal as CellPrimitive) ?? (typeof c.intVal === "number" ? (c.intVal as CellPrimitive) : null);
+      const cells = r.cell ?? r.cells ?? []; 
+      for (const c of cells) {
+        flat[c.columnId] =
+          (c.stringVal as CellPrimitive) ??
+          (typeof c.intVal === "number" ? (c.intVal as CellPrimitive) : null);
       }
       return { id: r.id, ...flat };
-    })    
-  }, [activeTableData]);
+    });
+  }, [opRows, activeTableData]);
+
 
   const transformColumns = useMemo<ColumnDef<FlattenedRow, CellPrimitive>[]>(() => {
     if (!activeTableData || !activeTableData?.row) {
@@ -373,7 +402,13 @@ export default function BasePage(){
           />
         )}
 
-        <FunctionBar/>
+        <FunctionBar
+          columns={activeTableData?.column || []}
+          filter={filter}
+          sort={sort}
+          onFilterChange={setFilter}
+          onSortChange={setSort}
+        />
 
         <main className="flex-1 min-h-0 flex">
           <div className=" flex flex-col w-[280px] p-3 text-gray-900 border-r border-gray-200 gap-1">

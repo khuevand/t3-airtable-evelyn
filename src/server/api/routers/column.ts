@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
+import { faker } from '@faker-js/faker';
 
 export const columnRouter = createTRPCRouter({
   createColumn: privateProcedure
@@ -33,8 +34,8 @@ export const columnRouter = createTRPCRouter({
           data: rows.map((row) => ({
             rowId: row.id,
             columnId: column.id,
-            stringVal: input.stringVal ? "" : null,
-            intVal: input.intVal ? null : null,
+            stringVal: input.stringVal ? faker.word.words(2) : null,
+            intVal: input.intVal ? faker.number.int({ min: 0, max: 999 }) : null,
           })),
         });
       }

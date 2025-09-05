@@ -20,6 +20,7 @@ interface TableTabsProps {
 	handleDeleteTable: (baseId:string, tableId: string) => void;
 }
 
+
 export default function TableTabs({ 
 	tableData,
 	baseId,
@@ -27,7 +28,7 @@ export default function TableTabs({
 	createTablePending,
   setActiveTable, 
   handleCreateTable,
-	handleDeleteTable
+	handleDeleteTable,
 }: TableTabsProps){
 
 	const [tableDropDownMenuId, setTableDropDownMenuId] = useState<string | undefined>(undefined);
