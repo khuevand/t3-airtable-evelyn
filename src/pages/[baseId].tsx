@@ -12,6 +12,7 @@ import {
 import { useUser } from "@clerk/nextjs";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import { faker } from '@faker-js/faker';
 import Image from "next/image";
 import { api } from "~/utils/api";
 import { useReactTable, getCoreRowModel, flexRender} from '@tanstack/react-table';
@@ -21,57 +22,70 @@ import { toast } from "react-toastify";
 import { ProfileMenu } from "~/components/base/profileMenu";
 import stringToColor from "~/components/base/encodeBaseColor";
 import LoadingState from "~/components/loadingState";
+import { CreateColumn } from "~/components/table/createColumn";
+import FunctionBar from "~/components/table/functionBar";
+import TableTabs from "~/components/table/tableTab";
 
-// Type definitions matching Prisma schema
 interface Cell {
   columnId: string;
-  stringVal?: string | null;
-  intVal?: number | null;
+  stringVal?: string;
+  intVal?: number;
 }
 
-interface Row {
-  id: string;
-  createdAt: Date;
-  tableId: string;
-  cell: Cell[];
-}
+type CellPrimitive = string | number | null;
 
-interface Column {
+type FlattenedRow = {
   id: string;
-  name: string;
-}
-
-interface TableData {
-  id: string;
-  column: Column[];
-  row: Row[];
-}
+} & Record<string, CellPrimitive>;
 
 export default function BasePage(){
   const router = useRouter();
   const utils = api.useUtils();
-  const { } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
   const { baseId } = router.query;
   const baseIdString = Array.isArray(baseId) ? baseId[0] : baseId;
-  
+ 
   const [isHomeIconHover, setHomeIconHover] = useState(false);
-  const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined); 
+  const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined);
+  const [isCreateColumn, setCreateColumn] = useState(false);
+  const [isCreateTable, setCreateTable] = useState(false);
+  const [isDeleteTable, setDeleteTable] = useState(false);
 
-  const {data: baseData} = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+  const [deleteMenu, setDeleteMenu] = useState<{
+    type: "row" | "column" | null;
+    id?: string;
+    x?: number;
+    y?: number;
+  }>({ type: null });
 
-  const {data: tableData, isLoading: isTableLoading} = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
-  
-  const {data: activeTableData, isLoading: isActiveTableLoading} = api.table.getTableById.useQuery({tableId: activeTableId!}, {enabled: !!activeTableId});
-  
+  const {data: baseData,
+        isLoading: isBaseLoading,
+  } = api.base.getBaseById.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+
+  const {data: tableData,
+      isLoading: isTableLoading,
+  } = api.table.getTableByBaseId.useQuery({baseId: baseIdString!}, {enabled: !!baseIdString})
+ 
+  const {data: activeTableData,
+       isLoading: isActiveTableLoading,
+  } = api.table.getTableById.useQuery({tableId: activeTableId as string}, {enabled: !!activeTableId});
+ 
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
       await utils.base.getBaseById.cancel({baseId});
+      await utils.table.getTableByBaseId.cancel({ baseId });
+
       const prevBase = utils.base.getBaseById.getData();
+       const prevTables = utils.table.getTableByBaseId.getData({ baseId });
+
       const optimisticTable = {
         id: uuidv4(),
         baseId: baseId,
         name: "",
-        columnSequence: 5, 
+        columnSequence: 5,
         createdAt: new Date(),
       }
 
@@ -81,7 +95,7 @@ export default function BasePage(){
         createdAt: new Date(),
         updatedAt: new Date(),
         tableSequence: 1,
-        userId: "exampleUserId",
+        userId: user?.id,
         table: [optimisticTable],
       }
 
@@ -89,47 +103,58 @@ export default function BasePage(){
         if (!old) return optimisticBase;
         return {...old, table: [...old.table, optimisticTable]};
       });
-      return {baseId, prevBase, optimisticTable};
+
+      if (prevTables) {
+        utils.table.getTableByBaseId.setData({ baseId }, [...prevTables, optimisticTable]);
+      }
+      return {baseId, prevBase, prevTables, optimisticTable};
     },
 
     onError: (_error, _variables, ctx) => {
       if (ctx?.prevBase){
         utils.base.getBaseById.setData({baseId: ctx.baseId}, ctx.prevBase);
+        utils.table.getTableByBaseId.setData({ baseId: ctx.baseId }, ctx.prevTables);
       }
     },
 
-    onSuccess: (newTable, ctx) => {
-      utils.base .getBaseById.setData({baseId: ctx.baseId}, (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          table: [...old.table, newTable]
-        }
-      });
+    onSuccess: (_newTable, _variables, ctx) => {
+      utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
+      utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
     },
 
-    onSettled: (ctx) => {
-      void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
-    }
+    onSettled: (_data, _err, ctx) => {
+      utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
+      utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
+    },
   });
 
   const deleteTable = api.table.deleteTable.useMutation({
     onMutate: async({baseId, tableId}) => {
       await utils.base.getBaseById.cancel({baseId});
+      await utils.table.getTableByBaseId.cancel({ baseId });
+
       const prevBase = utils.base.getBaseById.getData();
+      const prevTables = utils.table.getTableByBaseId.getData({ baseId });
+
       utils.base.getBaseById.setData({baseId}, (old) => {
         if (!old) return old;
         const remainingTable = old.table.filter((t) => t.id != tableId);
         const fallbackTable = remainingTable[0]?.id ?? undefined;
         setActiveTableId(fallbackTable);
         return {...old, table: remainingTable};
-      })
-      return {prevBase, baseId};
+      });
+
+      if (prevTables){
+        utils.table.getTableByBaseId.setData({baseId}, prevTables.filter((t) => t.id !== tableId))
+      };
+
+      return {prevBase, prevTables, baseId};
     },
 
     onError: (_err, _variables, ctx) => {
       if (ctx?.prevBase) {
         utils.base.getBaseById.setData({baseId: ctx.baseId}, ctx.prevBase);
+        utils.table.getTableByBaseId.setData({ baseId: ctx.baseId }, ctx.prevTables);
       }
       toast.error("Error on deleting table");
     },
@@ -140,6 +165,7 @@ export default function BasePage(){
 
     onSettled: (_data, _error, _variables, ctx) => {
       void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
+      void  utils.table.getTableByBaseId.invalidate({baseId: ctx?.baseId});
     }
   });
 
@@ -155,36 +181,39 @@ export default function BasePage(){
     }
   });
 
+
   const deleteRow = api.row.deleteRow.useMutation({
     onSuccess: () => {
-      toast.success("Row deleted successfully!");
+      toast.success("Row created successfully!");
     },
     onError: () => {
-      toast.error("Error deleting row.");
+      toast.error("Error creating row.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
     }
   });
+
 
   const addColumn = api.column.createColumn.useMutation({
     onSuccess: () => {
-      toast.success("Column created successfully!");
+      toast.success("Row created successfully!");
     },
     onError: () => {
-      toast.error("Error creating column.");
+      toast.error("Error creating row.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
     }
   });
 
+
   const deleteColumn = api.column.deleteColumn.useMutation({
     onSuccess: () => {
-      toast.success("Column deleted successfully!");
+      toast.success("Row created successfully!");
     },
     onError: () => {
-      toast.error("Error deleting column.");
+      toast.error("Error creating row.");
     },
     onSettled: () => {
      void utils.table.getTableById.invalidate({ tableId: activeTableId });
@@ -195,7 +224,6 @@ export default function BasePage(){
     if (isTableLoading) {
       return;
     }
-
     if (!tableData || tableData.length === 0) {
       setActiveTableId(undefined);
     } else {
@@ -203,28 +231,64 @@ export default function BasePage(){
     }
   }, [tableData, isTableLoading]);
 
-  const memorizedColumns = useMemo(() => {
-    if (!activeTableData?.column) return [];
-    return activeTableData.column.map((col) => ({
-      id: col.id,
-      accessorFn: (row: Row) => {
-        const cellData = row.cell?.find((cell) => cell.columnId === col.id);
-        return cellData?.stringVal ?? cellData?.intVal?.toString() ?? "";
-      },
-      header: col.name,
-    }));
+  const transformRows = useMemo<FlattenedRow[]>(() => {
+    if (!activeTableData || !activeTableData?.row) {
+      return [];
+    };
+
+    return activeTableData.row.map((r) => {
+      const flat: Record<string, CellPrimitive> = {};
+      for (const c of r.cell ?? []){
+        flat[c.columnId] = (c.stringVal as CellPrimitive) ?? (typeof c.intVal === "number" ? (c.intVal as CellPrimitive) : null);
+      }
+      return { id: r.id, ...flat };
+    })    
   }, [activeTableData]);
 
-  const tableDataRows = useMemo(() => {
-    if (!activeTableData?.row) return [];
-      return activeTableData.row;
+  const transformColumns = useMemo<ColumnDef<FlattenedRow, CellPrimitive>[]>(() => {
+    if (!activeTableData || !activeTableData?.row) {
+      return [];
+    };
+
+    return activeTableData.column.map((col) => ({
+      accessorKey: col.id,
+      header: col.name,
+      cell: ({getValue}) => {
+        const v = getValue() as CellPrimitive;
+        return v === null || v === undefined ? "" : String(v);
+      },
+    }))
   }, [activeTableData]);
 
   const table = useReactTable({
-    data: tableDataRows as Row[],
-    columns: memorizedColumns,
+    data: transformRows,
+    columns: transformColumns,
     getCoreRowModel: getCoreRowModel(),
-  });
+  })
+
+  const handleCreateTable = (baseId: string) => {
+    createTable.mutate({ baseId });
+  }
+
+  const handleDeleteTable = (baseId: string, tableId: string) => {
+    deleteTable.mutate({ baseId, tableId });
+  }
+
+  const handleAddRow = (tableId: string) => {
+    addRow.mutate({tableId});
+  }
+
+  const handleDeleteRow = (rowId: string) => {
+    deleteRow.mutate({rowId});
+  }
+
+  const handleCreateColumn = (tableId: string, name: string, stringVal: boolean, intVal: boolean) =>{
+    addColumn.mutate({tableId, name, stringVal, intVal});
+  }
+
+  const handleDeleteColumn = (tableId: string, columnId: string) => {
+    deleteColumn.mutate({tableId, columnId});
+  }
 
   return (
     <div className="flex h-screen">
@@ -240,11 +304,13 @@ export default function BasePage(){
           )}
         </div>
 
+
         <div className="flex flex-col gap-2 items-center text-gray cursor-pointer">
           <button className="flex items-center px-1 py-1 gap-1 text-[13px] text-gray-700 rounded-2xl hover:bg-gray-200 cursor-pointer"
                   title="Help Center">
             <HelpCircle className="w-4 h-4"></HelpCircle>
           </button>
+
 
           <button className="flex items-center justify-center h-7 w-7 rounded-full text-[13px] text-gray-700 border border-white hover:bg-gray-200 cursor-pointer"
                   title="Notifications"
@@ -253,9 +319,10 @@ export default function BasePage(){
           </button>
           <div className="flex items-center justify-center h-6 w-6 mr-2">
             <ProfileMenu isBasePage={true}/>
-          </div> 
+          </div>
         </div>
       </aside>
+
 
       <div className="flex-1 flex flex-col">
         <header className="flex items-center justify-between p-3 border-b border-gray-200">
@@ -268,12 +335,14 @@ export default function BasePage(){
             <ChevronDown className="text-gray-600 w-4 h-4"/>
           </div>
 
+
           <div className="flex items-center text-[13px] gap-4 font-medium">
             <span>Data</span>
             <span className="text-gray-600">Automations</span>
             <span className="text-gray-600">Interfaces</span>
             <span className="text-gray-600">Forms</span>
           </div>
+
 
           <div className="flex items-center text-[13px] gap-1.5">
             <div className="p-1 rounded-2xl border border-white hover:bg-gray-100 cursor-pointer">
@@ -284,101 +353,41 @@ export default function BasePage(){
               <span>Launch</span>
             </div>
 
+
             <div className="px-3.5 py-1 font-semibold rounded-lg border border-gray-200 hover:shadow-lg cursor-pointer">
               <span>Share</span>
             </div>
           </div>
         </header>
 
-        <section className="border-b border-gray-200 py-6 bg-white">
-          <div className="flex items-center gap-2 px-4">
-            <h3 className="text-sm font-medium text-gray-700">Row Controls:</h3>
-            <button 
-              onClick={() => activeTableId && addRow.mutate({ tableId: activeTableId })}
-              disabled={!activeTableId || addRow.isPending}
-              className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-            >
-              {addRow.isPending ? 'Adding...' : 'Add Row'}
-            </button>
-            <button 
-              onClick={() => {
-                const firstRow = tableDataRows[0];
-                if (firstRow) {
-                  deleteRow.mutate({ rowId: firstRow.id });
-                }
-              }}
-              disabled={!tableDataRows.length || deleteRow.isPending}
-              className="px-3 py-1 text-xs bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50"
-            >
-              {deleteRow.isPending ? 'Deleting...' : 'Delete First Row'}
-            </button>
-          </div>
-          <div className="flex items-center gap-2 px-4 mt-2">
-            <h3 className="text-sm font-medium text-gray-700">Column Controls:</h3>
-            <button 
-              onClick={() => {
-                if (activeTableId) {
-                  addColumn.mutate({ 
-                    tableId: activeTableId, 
-                    name: `Column ${Date.now()}`, 
-                    stringVal: true, 
-                    intVal: false 
-                  });
-                }
-              }}
-              disabled={!activeTableId || addColumn.isPending}
-              className="px-3 py-1 text-xs bg-purple-500 text-white rounded hover:bg-purple-600 disabled:opacity-50"
-            >
-              {addColumn.isPending ? 'Adding...' : 'Add String Column'}
-            </button>
-            <button 
-              onClick={() => {
-                if (activeTableId) {
-                  addColumn.mutate({ 
-                    tableId: activeTableId, 
-                    name: `Number ${Date.now()}`, 
-                    stringVal: false, 
-                    intVal: true 
-                  });
-                }
-              }}
-              disabled={!activeTableId || addColumn.isPending}
-              className="px-3 py-1 text-xs bg-indigo-500 text-white rounded hover:bg-indigo-600 disabled:opacity-50"
-            >
-              {addColumn.isPending ? 'Adding...' : 'Add Number Column'}
-            </button>
-            <button 
-              onClick={() => {
-                const firstColumn = activeTableData?.column[0];
-                if (activeTableId && firstColumn) {
-                  deleteColumn.mutate({ 
-                    tableId: activeTableId, 
-                    columnId: firstColumn.id 
-                  });
-                }
-              }}
-              disabled={!activeTableData?.column.length || deleteColumn.isPending}
-              className="px-3 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
-            >
-              {deleteColumn.isPending ? 'Deleting...' : 'Delete First Column'}
-            </button>
-          </div>
-        </section>
 
-        <section className="border-b border-gray-200 py-6 bg-white">
+        {tableData && activeTableId && baseIdString && (
+          <TableTabs
+            tableData={tableData}
+            baseId={baseIdString}
+            activeTableId={activeTableId}
+            createTablePending={createTable.isPending}
+            setActiveTable={setActiveTableId}
+            handleCreateTable={handleCreateTable}
+            handleDeleteTable={handleDeleteTable}
+          />
+        )}
 
-        </section>
+        <FunctionBar/>
+
         <main className="flex-1 min-h-0 flex">
-          <div className="flex flex-col w-[280px] p-3 text-gray-900 border-r border-gray-200 gap-1">
+          <div className=" flex flex-col w-[280px] p-3 text-gray-900 border-r border-gray-200 gap-1">
             <div className="flex items-center p-2 gap-2 rounded-lg hover:bg-gray-100 cursor-pointer">
               <Plus className="w-4 h-4 text-gray-600"/>
               <span className="text-[12.5px]">Create new...</span>
             </div>
 
+
             <div className="flex items-center p-2 gap-2 text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer">
               <Search className="w-4 h-4"/>
               <span className="text-[12.5px]">Find a view</span>
             </div>
+
 
             <div className="flex items-center p-2 gap-2 rounded-lg hover:bg-gray-100 cursor-pointer">
               <Grid2X2 className="w-4 h-4 text-blue-700"/>
@@ -386,47 +395,131 @@ export default function BasePage(){
             </div>
           </div>
 
+
           <div className="flex-1 bg-slate-100">
-            <div className="flex-1 bg-slate-100 p-4">
+            <div className="flex-1 bg-slate-100">
               {isActiveTableLoading ? (
                 <LoadingState text="Loading table data..." />
               ) : (
-                <div className="bg-white rounded-lg shadow overflow-hidden">
-                  <table className="min-w-full">
-                    <thead className="bg-gray-50">
-                      {table.getHeaderGroups().map(headerGroup => (
+                <div className="inline-flex flex flex-col w-full">
+                  <table className="bg-white text-[13px]">
+                    <thead>
+                      {table.getHeaderGroups().map((headerGroup) => (
                         <tr key={headerGroup.id}>
-                          {headerGroup.headers.map(header => (
+                          {headerGroup.headers.map((header, i) => (
                             <th
                               key={header.id}
-                              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                              className={`border ${i === 0 ? "border-l-0" : ""} text-left border-t-0 border-gray-300 px-2 py-2 font-semibold hover:bg-gray-100`}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setDeleteMenu({
+                                  type: "column",
+                                  id: header.column.id,
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                });
+                              }}
                             >
                               {header.isPlaceholder
                                 ? null
-                                : flexRender(
-                                    header.column.columnDef.header,
-                                    header.getContext()
-                                  )}
+                                : flexRender(header.column.columnDef.header, header.getContext())}
                             </th>
                           ))}
+                          <th className="border border-t-0 border-gray-300 px-2 py-2 font-semibold text-center w-10 hover:bg-gray-100 cursor-pointer"
+                              onClick={() => setCreateColumn(true)}
+                          >
+                            <Plus className="w-4 h-4 text-gray-600 inline" />
+                          </th>
                         </tr>
                       ))}
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {table.getRowModel().rows.map(row => (
-                        <tr key={row.id}>
-                          {row.getVisibleCells().map(cell => (
-                            <td
-                              key={cell.id}
-                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-900"
-                            >
+                    <tbody>
+                      {table.getRowModel().rows.map((row) => (
+                        <tr key={row.id}
+                            className="hover:bg-gray-100"
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              setDeleteMenu({
+                                type: "row",
+                                id: row.id,
+                                x: e.clientX,
+                                y: e.clientY,
+                              })
+                            }}>
+                          {row.getVisibleCells().map((cell) => (
+                            <td key={cell.id} className=" border border-l-0 border-gray-300 px-3 py-4">
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </td>
                           ))}
                         </tr>
                       ))}
+                      <tr
+                        className="cursor-pointer hover:bg-gray-50"
+                        onClick={() => activeTableId && handleAddRow(activeTableId)}
+                      >
+                        <td className=" px-2 py-2">
+                          <div className="flex items-center gap-2 text-gray-600 text-[13px]">
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add row</span>
+                          </div>
+                        </td>
+                      </tr>
                     </tbody>
                   </table>
+                  
+                  {activeTableId && (
+                    <CreateColumn
+                      tableId={activeTableId}
+                      isCreateColumn={isCreateColumn}
+                      onClose={() => setCreateColumn(false)}
+                      onCreateColumn={handleCreateColumn}
+                    />
+                  )}
+
+                  {deleteMenu && (
+                    <div
+                      className="absolute z-50 bg-white border border-gray-200 shadow-md rounded-md"
+                      style={{ top: deleteMenu.y, left: deleteMenu.x }}
+                    >
+                      {deleteMenu.type === "row" && (
+                        <div className="flex flex-col">
+                          <button className="px-3 py-2 text-[12.5px] text-center w-full bg-white hover:bg-gray-100"
+                                  onClick={() => {
+                                    if (deleteMenu.id){
+                                      handleDeleteRow(deleteMenu.id);
+                                    }
+                                    setDeleteMenu({type: null});
+                                  }}>
+                            Delete row
+                          </button>
+                          <button className="px-3 py-2 text-red-500 text-[12.5px] text-center w-full bg-white hover:bg-gray-100"
+                                  onClick={() => setDeleteMenu({type: null})}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {deleteMenu.type === "column" && (
+                        <div className="flex flex-col">
+                          <button className="px-4 py-2 text-[12.5px] text-center w-full bg-white hover:bg-gray-100"
+                                  onClick={() => {
+                                    if (deleteMenu.id && activeTableId){
+                                      handleDeleteColumn(activeTableId, deleteMenu.id);
+                                    }
+                                    setDeleteMenu({type: null});
+                                  }}>
+                            Delete column
+                          </button>
+                          <button className="px-4 py-2 text-red-500 text-[12.5px] text-center w-full bg-white hover:bg-gray-100"
+                                  onClick={() => setDeleteMenu({type: null})}>
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+
                 </div>
               )}
             </div>
@@ -436,3 +529,4 @@ export default function BasePage(){
     </div>
   );
 }
+

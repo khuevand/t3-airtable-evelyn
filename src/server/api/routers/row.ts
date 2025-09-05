@@ -31,6 +31,9 @@ export const rowRouter = createTRPCRouter({
           cell: {
             create: createCells,
           }
+        },
+        include: {
+          cell: true,
         }
       });
       

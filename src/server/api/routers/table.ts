@@ -45,7 +45,7 @@ export const tableRouter = createTRPCRouter({
         });
 
         for (let i = 0; i < 3; i++ ){
-          await ctx.db.row.create({
+          await tx.row.create({
             data: {
               tableId: table.id,
               cell: {
@@ -60,7 +60,6 @@ export const tableRouter = createTRPCRouter({
 
         return table;
       })
-      return result;
     }
   ),
 
@@ -95,7 +94,9 @@ export const tableRouter = createTRPCRouter({
         where: {id: input.tableId},
         include: {
           column: true,
-          row: true,
+          row: {
+            include: {cell: true,},
+          }
         }
       })
       return table;
