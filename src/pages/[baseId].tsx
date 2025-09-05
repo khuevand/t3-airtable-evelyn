@@ -445,8 +445,8 @@ export default function BasePage(){
 
           <div className="flex-1 bg-slate-100">
             <div className="flex-1 bg-slate-100">
-              {isRowsLoading ? (
-                <LoadingState text="Loading table data..." />
+              {isActiveTableLoading ? (
+                <LoadingState text="Loading table data" />
               ) : (
                 <div className="inline-flex flex flex-col w-full">
                   <table className="bg-white text-[13px]">
