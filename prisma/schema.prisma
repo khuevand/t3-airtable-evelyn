@@ -62,7 +62,7 @@ model Column {
   cell Cell[]
 
   @@index([id])
-  @@index([tableId])
+  @@index([tableId, order])
 }
 
 model Row {
@@ -73,7 +73,7 @@ model Row {
   cell Cell[]
 
   @@index([id])
-  @@index([tableId])
+  @@index([tableId, createdAt])  
 }
 
 model Cell {
@@ -85,6 +85,8 @@ model Cell {
   columnId String
   rowId String
 
-  @@index([id])
-  @@index([columnId, rowId])
+  @@index([rowId])
+  @@index([columnId])
+  @@index([columnId, stringVal])
+  @@index([columnId, intVal])
 }

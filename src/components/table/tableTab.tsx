@@ -13,7 +13,7 @@ interface Table {
 interface TableTabsProps {
 	tableData: Table[],
 	baseId: string,
-	activeTableId: string,
+	activeTableId: string | undefined,
 	createTablePending: boolean,
 	setActiveTable: (tableId: string) => void;
 	handleCreateTable: (baseId: string) => void;
