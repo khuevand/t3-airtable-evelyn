@@ -10,7 +10,7 @@ import {
   Grid2X2
 } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import { api } from "~/utils/api";
@@ -24,7 +24,7 @@ import LoadingState from "~/components/loadingState";
 import { CreateColumn } from "~/components/table/createColumn";
 import FunctionBar from "~/components/table/functionBar";
 import TableTabs from "~/components/table/tableTab";
-
+import { EditableCell } from "~/components/table/editableCell";
 
 type Cell = {
   id: string;
@@ -79,14 +79,15 @@ export default function BasePage(){
   const [filters, setFilters] = useState<Filter[]>([]);
   const [filterLogic, setFilterLogic] = useState<filterLogic>("AND");
   const [sorts, setSorts] = useState<Sort[]>([]);
-
-
   const [deleteMenu, setDeleteMenu] = useState<{
     type: "row" | "column" | null;
     id?: string;
     x?: number;
     y?: number;
   }>({ type: null });
+
+  const [focusedCell, setFocusedCell] = useState<{ rowId: string; columnId: string } | null>(null);
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>({});
 
   const {data: baseData,
         isLoading: isBaseLoading,
@@ -235,7 +236,6 @@ export default function BasePage(){
     },
   });
 
-
   const addColumn = api.column.createColumn.useMutation({
     onSuccess: () => {
       toast.success("Column created successfully!");
@@ -287,6 +287,29 @@ export default function BasePage(){
     } 
   }, [tableData, isTableLoading]);
 
+  useEffect(() => {
+    if (!activeTableData?.column) return;
+    setColumnVisibility(prev => {
+      const next: Record<string, boolean> = {};
+      for (const c of activeTableData.column) next[c.id] = prev[c.id] ?? true;
+      return next;
+    });
+  }, [activeTableData?.column?.map(c => c.id).join(",")]);
+
+  const handleToggleColumn = useCallback((colId: string, visible: boolean) => {
+    setColumnVisibility(prev => ({ ...prev, [colId]: visible }));
+  }, []);
+
+  const handleShowAllColumns = useCallback(() => {
+    if (!activeTableData?.column) return;
+    setColumnVisibility(Object.fromEntries(activeTableData.column.map(c => [c.id, true])));
+  }, [activeTableData?.column?.map(c => c.id).join(",")]);
+
+  const handleHideAllColumns = useCallback(() => {
+    if (!activeTableData?.column) return;
+    setColumnVisibility(Object.fromEntries(activeTableData.column.map(c => [c.id, false])));
+  }, [activeTableData?.column?.map(c => c.id).join(",")]);
+
   const transformRows = useMemo<FlattenedRow[]>(() => {
     const src: Row[] = opRows ?? [];
     return src.map((r) => {
@@ -301,6 +324,45 @@ export default function BasePage(){
     });
   }, [opRows, activeTableData]);
 
+  const handleCellNavigation = useCallback((direction: 'up' | 'down' | 'left' | 'right' | 'tab' | 'shift-tab') => {
+    if (!focusedCell || !activeTableData) return;
+
+    const rows = transformRows;
+    const columns = activeTableData.column;
+    
+    const currentRowIndex = rows.findIndex(row => row.id === focusedCell.rowId);
+    const currentColIndex = columns.findIndex(col => col.id === focusedCell.columnId);
+    
+    if (currentRowIndex === -1 || currentColIndex === -1) return;
+
+    let newRowIndex = currentRowIndex;
+    let newColIndex = currentColIndex;
+
+    switch (direction) {
+      case 'up':
+        newRowIndex = Math.max(0, currentRowIndex - 1);
+        break;
+      case 'down':
+        newRowIndex = Math.min(rows.length - 1, currentRowIndex + 1);
+        break;
+      case 'left':
+      case 'shift-tab':
+        newColIndex = Math.max(0, currentColIndex - 1);
+        break;
+      case 'right':
+      case 'tab':
+        newColIndex = Math.min(columns.length - 1, currentColIndex + 1);
+        break;
+    }
+
+    const newRowId = rows[newRowIndex]?.id;
+    const newColumnId = columns[newColIndex]?.id;
+
+    if (newRowId && newColumnId) {
+      setFocusedCell({ rowId: newRowId, columnId: newColumnId });
+    }
+  }, [focusedCell, transformRows, activeTableData]);
+
 
   const transformColumns = useMemo<ColumnDef<FlattenedRow, CellPrimitive>[]>(() => {
     if (!activeTableData || !activeTableData?.column) {
@@ -310,9 +372,22 @@ export default function BasePage(){
     return activeTableData.column.map((col) => ({
       accessorKey: col.id,
       header: col.name,
-      cell: ({getValue}) => {
+      cell: ({getValue, row}) => {
         const v = getValue();
-        return v === null || v === undefined ? "" : String(v);
+        const rowId = row.original.id;
+        const isFocused = focusedCell?.rowId === rowId && focusedCell?.columnId === col.id;
+
+        return (
+        <EditableCell
+          initialValue={v}
+          tableId={activeTableId!}
+          rowId={rowId}
+          columnId={col.id}
+          isFocused={isFocused}
+          onNavigate={handleCellNavigation}
+          onFocusCell={(rId, cId) => setFocusedCell({ rowId: rId, columnId: cId })}
+        />
+      );
       },
     }))
   }, [activeTableData]);
@@ -321,7 +396,8 @@ export default function BasePage(){
     data: transformRows,
     columns: transformColumns,
     getCoreRowModel: getCoreRowModel(),
-    // getRowId: (r) => r.id,
+    state: { columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
   })
 
   const handleCreateTable = (baseId: string) => {
@@ -439,6 +515,11 @@ export default function BasePage(){
             onFilterChange={setFilters}
             onSortChange={setSorts}
             onFilterLogicChange={setFilterLogic}
+
+            columnVisibility={columnVisibility}
+            onToggleColumn={handleToggleColumn}
+            onShowAllColumns={handleShowAllColumns}
+            onHideAllColumns={handleHideAllColumns}
           />
         )}
 

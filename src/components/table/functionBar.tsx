@@ -45,13 +45,17 @@ type Sort = { columnId: string; direction: SortDir };
 
 
 interface FunctionBarProps {
- columns: Column[],
- filters: Filter[];
- sorts: Sort[];
- filterLogic: filterLogic,
- onFilterChange: (filter: Filter[]) => void;
- onSortChange: (sort: Sort[]) => void;
- onFilterLogicChange: (filterLogic: filterLogic) => void;
+  columns: Column[],
+  filters: Filter[];
+  sorts: Sort[];
+  filterLogic: filterLogic,
+  onFilterChange: (filter: Filter[]) => void;
+  onSortChange: (sort: Sort[]) => void;
+  onFilterLogicChange: (filterLogic: filterLogic) => void;
+  columnVisibility: Record<string, boolean>;
+  onToggleColumn: (columnId: string, visible: boolean) => void;
+  onShowAllColumns: () => void;
+  onHideAllColumns: () => void;
 }
 
 export default function FunctionBar({
@@ -62,12 +66,16 @@ export default function FunctionBar({
   onFilterChange,
   onSortChange,
   onFilterLogicChange,
+  columnVisibility,
+  onToggleColumn,
+  onShowAllColumns,
+  onHideAllColumns,
 }: FunctionBarProps){
   const [showFilterMenu, setShowFilterMenu] = useState(false);
-
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [sortColId, setSortColId] = useState<string>(columns?.[0]?.id ?? "");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [showHideMenu, setShowHideMenu] = useState(false);
 
   const clearAllFilters = () => {
     onFilterChange([]);
@@ -120,12 +128,55 @@ export default function FunctionBar({
 
 
       <div className="flex items-center gap-2 mr-3">
-        <button className="flex items-center text-gray-600 gap-1 px-2 py-1 rounded-md hover:bg-gray-100 cursor-pointer">
-          <EyeOff className="w-3.5 h-3.5"/>
-          <span className="text-gray-600 text-[12.5px]">Hide fields</span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowHideMenu(v => !v)}
+            className="flex items-center text-gray-600 gap-1 px-2 py-1 rounded-md hover:bg-gray-100 cursor-pointer"
+            title="Hide fields"
+          >
+            <EyeOff className="w-3.5 h-3.5"/>
+            <span className="text-[12.5px]">Hide fields</span>
+          </button>
 
-
+          {showHideMenu && (
+            <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50 p-2">
+              <div className="flex items-center justify-between px-2 pb-2">
+                <button
+                  onClick={onShowAllColumns}
+                  className="text-[12px] text-blue-600 hover:underline"
+                >
+                  Show all
+                </button>
+                <button
+                  onClick={onHideAllColumns}
+                  className="text-[12px] text-blue-600 hover:underline"
+                >
+                  Hide all
+                </button>
+              </div>
+              <div className="max-h-64 overflow-auto">
+                {columns.map((c) => {
+                  const visible = columnVisibility[c.id] ?? true;
+                  return (
+                    <label
+                      key={c.id}
+                      className="flex items-center justify-between px-2 py-1 hover:bg-gray-50 cursor-pointer"
+                    >
+                      <span className="text-[12.5px] text-gray-800">{c.name}</span>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={visible}
+                        onChange={(e) => onToggleColumn(c.id, e.target.checked)}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+        
         <div className="relative">
           <button
             onClick={() => setShowFilterMenu(!showFilterMenu)}

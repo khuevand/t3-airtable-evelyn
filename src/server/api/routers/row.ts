@@ -237,7 +237,8 @@ export const rowRouter = createTRPCRouter({
         }
       }
 
-      // Filter sorts to only include valid columns
+      // When we change the value, we would have to remove the changed sort rules
+      // -> conly take sorts that only include valid columns
       const validSorts = sorts.filter(sort => sortColumns.has(sort.columnId));
 
       if (validSorts.length > 0) {
