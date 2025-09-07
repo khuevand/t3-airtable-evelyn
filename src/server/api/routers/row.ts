@@ -25,6 +25,18 @@ const sortSchema = z.object({
   direction: z.enum(["asc", "desc"]),
 });
 
+type Column = {
+  id: string;
+  stringVal?: boolean;
+  intVal?: boolean;
+  order: number;
+};
+
+type SortInfo = {
+  column: Column;
+  direction: "asc" | "desc";
+};
+
 export const rowRouter = createTRPCRouter({
   createRow: privateProcedure
     .input(z.object({ tableId: z.string() }))
@@ -228,7 +240,9 @@ export const rowRouter = createTRPCRouter({
     });
 
     if (sorts.length > 0) {
-      const sortColumns = new Map();
+      // Use a properly typed Map instead of any
+      const sortColumns = new Map<string, SortInfo>();
+      
       for (const sort of sorts) {
         const sortCol = table.column.find((c) => c.id === sort.columnId);
         if (sortCol) {
@@ -240,7 +254,7 @@ export const rowRouter = createTRPCRouter({
       }
 
       // When we change the value, we would have to remove the changed sort rules
-      // -> conly take sorts that only include valid columns
+      // -> only take sorts that only include valid columns
       const validSorts = sorts.filter(sort => sortColumns.has(sort.columnId));
 
       if (validSorts.length > 0) {
@@ -288,9 +302,7 @@ export const rowRouter = createTRPCRouter({
         columnId: c.columnId,
         stringVal: c.stringVal,
         intVal: c.intVal,
-      })
-    ),
-
-    }))
+      })),
+    }));
     }),
 });

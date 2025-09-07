@@ -1,234 +1,311 @@
-import {useState, useEffect, useCallback, useRef} from "react";
-import { toast } from "react-toastify";
-import { api } from "~/utils/api";
+import { z } from "zod";
+import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
+import { Prisma } from "@prisma/client";
+import { TRPCError } from "@trpc/server";
+import Filter from "~/components/table/Function/filter";
+import Sort from "~/components/table/Function/sort";
 
-interface EditableCellProps {
-  initialValue: string | number | null;
-  tableId: string;
-  rowId: string;
-  columnId: string;
-  isFocused?: boolean;
-  onNavigate?: (direction: 'up' | 'down' | 'left' | 'right' | 'tab' | 'shift-tab') => void;
-  onFocusCell?: (rowId: string, columnId: string) => void;
-}
+const filterSchema = z.object({
+  columnId: z.string(),
+  type: z.enum([
+    "is",
+    "is not",
+    "contains",
+    "does not contain",
+    "is empty",
+    "is not empty",
+    "greater than",
+    "lesser than",
+  ]),
+  value: z.union([z.string(), z.number()]).optional().nullish(),
+});
 
-export const EditableCell: React.FC<EditableCellProps> = ({
-  initialValue,
-  tableId,
-  rowId,
-  columnId,
-  isFocused,
-  onNavigate,
-  onFocusCell,
-}) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [value, setValue] = useState<string>(initialValue === null || initialValue === undefined ? "" : String(initialValue));
-  const inputRef = useRef<HTMLInputElement>(null);
-  const cellRef = useRef<HTMLDivElement>(null);
+const sortSchema = z.object({
+  columnId: z.string(),
+  direction: z.enum(["asc", "desc"]),
+});
 
-  const updateCell = api.cell.updateCell.useMutation({
-    onSuccess: () => {
-      setIsEditing(false);
-    },
-    onError: () => {
-      setValue(initialValue === null || initialValue === undefined ? "" : String(initialValue));
-      setIsEditing(false);
-      toast.error("Error updating cell");
-    }
-  });
-  
-  useEffect(() => {
-    if (isFocused && !isEditing) {
-      cellRef.current?.focus();
-    }
-  }, [isFocused, isEditing]);
-  
-  useEffect(() => {
-    if (isEditing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [isEditing]);
-
-  const handleSave = useCallback(async () => {
-    if (!isEditing) {
-      return;
-    }
-    
-    const currentValue = initialValue === null || initialValue === undefined ? "" : String(initialValue);
-    if (value === currentValue) {
-      setIsEditing(false);
-      return;
-    }
-    
-    const trimmedValue = value.trim();
-    const numberValue = Number(trimmedValue);
-    const isNumber = !isNaN(numberValue) && isFinite(numberValue) && trimmedValue !== "";
-
-    try {
-      await updateCell.mutateAsync({
-        columnId,
-        rowId,
-        intValue: isNumber ? Math.floor(numberValue) : undefined,
-        stringValue: isNumber ? undefined : trimmedValue,
-      });
-    } catch (error) {
-    }
-  }, [value, initialValue, isEditing, updateCell, columnId, rowId]);
-
-  const handleCancel = useCallback(() => {
-    setValue(initialValue === null || initialValue === undefined ? "" : String(initialValue));
-    setIsEditing(false);
-  }, [initialValue]);
-
-  const handleNavigation = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (isEditing) {
-        void handleSave();
-        setTimeout(() => {
-          if (onNavigate) {
-            onNavigate("down");
-          }
-        }, 0);
-      } else {
-        setIsEditing(true);
-      }
-    }
-    else if (e.key === "Escape") {
-      e.preventDefault();
-      if (isEditing) {
-        handleCancel();
-      }
-    }
-    else if (e.key === "Tab") {
-      e.preventDefault();
-      if (isEditing) {
-        void handleSave();
-      }
-      if (onNavigate) {
-        const direction = e.shiftKey ? 'shift-tab' : 'tab';
-        setTimeout(() => {
-          onNavigate(direction);
-        }, 0);
-      }
-    }
-    else if (e.key === "ArrowUp") {
-      if (!isEditing || inputRef.current?.selectionStart === 0) {
-        e.preventDefault();
-        if (isEditing) {
-          void handleSave();
-        }
-        if (onNavigate) {
-          setTimeout(() => {
-            onNavigate("up");
-          }, 0);
-        }
-      }
-    }
-    else if (e.key === "ArrowDown") {
-      if (!isEditing || inputRef.current?.selectionStart === inputRef.current?.value.length) {
-        e.preventDefault();
-        if (isEditing) {
-          void handleSave();
-        }
-        if (onNavigate) {
-          setTimeout(() => {
-            onNavigate("down");
-          }, 0);
-        }
-      }
-    }
-    else if (e.key === "ArrowLeft") {
-      if (!isEditing || inputRef.current?.selectionStart === 0) {
-        e.preventDefault();
-        if (isEditing) {
-          void handleSave();
-        }
-        if (onNavigate) {
-          setTimeout(() => {
-            onNavigate("left");
-          }, 0);
-        }
-      }
-    }
-    else if (e.key === "ArrowRight") {
-      if (!isEditing || inputRef.current?.selectionStart === inputRef.current?.value.length) {
-        e.preventDefault();
-        if (isEditing) {
-          void handleSave();
-        }
-        if (onNavigate) {
-          setTimeout(() => {
-            onNavigate("right");
-          }, 0);
-        }
-      }
-    }
-    else if (!isEditing && (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete')) {
-      e.preventDefault();
-      setIsEditing(true);
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        setValue('');
-      } else if (e.key.length === 1) {
-        setValue(e.key);
-      }
-    }
-  }, [handleSave, handleCancel, onNavigate, isEditing]);
-
-  const handleBlur = useCallback(() => {
-    if (isEditing) {
-      void handleSave();
-    }
-  }, [handleSave, isEditing]);
-
-  const handleCellClick = useCallback(() => {
-    cellRef.current?.focus();
-    onFocusCell?.(rowId, columnId);
-  }, [onFocusCell, rowId, columnId]);
-
-  const handleDoubleClick = useCallback(() => {
-    onFocusCell?.(rowId, columnId);
-    setIsEditing(true);
-  }, [onFocusCell, rowId, columnId]);
-
-  useEffect(() => {
-    if (isFocused && !isEditing) {
-      onFocusCell?.(rowId, columnId);
-      cellRef.current?.focus();
-    }
-  }, [isFocused, isEditing, onFocusCell, rowId, columnId]);
-
-  const displayValue = value ?? (typeof initialValue === 'number' ? initialValue.toString() : initialValue || "");
-
-  if (isEditing) {
-    return (
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={handleBlur}
-        onKeyDown={handleNavigation}
-        className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        disabled={updateCell.isPending}
-      />
-    );
-  }
-
-  return (
-    <div
-      ref={cellRef}
-      onClick={handleCellClick}
-      onDoubleClick={handleDoubleClick}
-      onKeyDown={handleNavigation}
-      tabIndex={0}
-      className={`w-full px-2 py-1 cursor-pointer hover:bg-gray-100 rounded min-h-[2rem] flex items-center focus:outline-none ${
-        isFocused ? 'ring-2 ring-blue-300' : ''
-      }`}
-      title="Click to select, double-click to edit, use arrow keys or Tab to navigate"
-    >
-      {displayValue}
-    </div>
-  );
+// Define the column type (adjust this based on your actual Column type from Prisma)
+type Column = {
+  id: string;
+  stringVal?: boolean;
+  intVal?: boolean;
+  order: number;
+  // Add other column properties as needed
 };
+
+// Define the sort info type
+type SortInfo = {
+  column: Column;
+  direction: "asc" | "desc";
+};
+
+export const rowRouter = createTRPCRouter({
+  createRow: privateProcedure
+    .input(z.object({ tableId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const columns = await ctx.db.column.findMany({
+        where: { tableId: input.tableId },
+      });
+
+      const createCells = columns.map((col) => {
+        let stringVal: string | null = null;
+        let intVal: number | null = null;
+
+        if (col.stringVal) {
+          stringVal = "";
+        } else if (col.intVal) {
+          intVal = null;
+        }
+
+        return { columnId: col.id, stringVal, intVal };
+      });
+
+      const row = await ctx.db.row.create({
+        data: {
+          tableId: input.tableId,
+          cell: { create: createCells },
+        },
+        include: { cell: true },
+      });
+
+      return row;
+    }),
+
+  deleteRow: privateProcedure
+    .input(z.object({ rowId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { count } = await ctx.db.row.deleteMany({
+        where: { id: input.rowId },
+      });
+
+      return {
+        success: count > 0,
+        rowId: input.rowId,
+        alreadyDeleted: count === 0,
+      };
+    }),
+
+  getRowsByOperation: privateProcedure
+    .input(
+      z.object({
+        tableId: z.string(),
+        filters: z.array(filterSchema).default([]),
+        sorts: z.array(sortSchema).default([]),
+        logic: z.enum(["AND", "OR"]).default("AND"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const { tableId, filters, sorts, logic } = input;
+
+      const table = await ctx.db.table.findUnique({
+        where: { id: tableId },
+        include: { column: { orderBy: { order: "asc" } } },
+      });
+      if (!table) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
+      }
+
+      const baseRules: Prisma.RowWhereInput = { tableId };
+      const conditions: Prisma.RowWhereInput[] = [];
+
+      for (const filter of filters) {
+        const col = table.column.find((c) => c.id === filter.columnId);
+        if (col) {
+          const v = filter.value;
+
+          if (col.stringVal) {
+            const filterStr = String(v ?? "");
+
+           if (filter.type === "is"){
+                conditions.push({
+                  cell: {
+                    some: {
+                      columnId: col.id,
+                      stringVal: { equals: filterStr, mode: "insensitive" },
+                    },
+                  },
+                });
+                continue;
+            }
+
+            if (filter.type === "is not"){
+                conditions.push({
+                  NOT: {
+                    cell: {
+                      some: {
+                        columnId: col.id,
+                        stringVal: { equals: filterStr, mode: "insensitive" },
+                      },
+                    },
+                  },
+                });
+                continue;
+            }
+
+            if (filter.type === "contains"){
+                conditions.push({
+                  cell: {
+                    some: {
+                      columnId: col.id,
+                      stringVal: { contains: filterStr, mode: "insensitive" },
+                    },
+                  },
+                });
+                continue;
+            }
+
+            if (filter.type === "does not contain"){
+                conditions.push({
+                  NOT: {
+                    cell: {
+                      some: {
+                        columnId: col.id,
+                        stringVal: { contains: filterStr, mode: "insensitive" },
+                      },
+                    },
+                  },
+                });
+                continue;
+            }
+
+            if (filter.type === "is empty"){
+                conditions.push({
+                  OR: [
+                    { cell: { none: { columnId: col.id } } },
+                    {
+                      cell: {
+                        some: {
+                          columnId: col.id,
+                          OR: [{ stringVal: null }, { stringVal: "" }],
+                        },
+                      },
+                    },
+                  ],
+                });
+                continue;
+            }
+
+            if (filter.type === "is not empty"){
+                conditions.push({
+                  cell: {
+                    some: {
+                      columnId: col.id,
+                      AND: [
+                        { stringVal: { not: null } },
+                        { stringVal: { not: "" } },
+                      ],
+                    },
+                  },
+                });
+                continue;
+            }
+          }
+
+          if (col.intVal) {
+            const filterInt = typeof v === "string" ? Number(v) : (v as number | undefined);
+            if (filterInt !== undefined && !Number.isNaN(filterInt)) {
+              if (filter.type === "greater than"){
+                  conditions.push({
+                    cell: {
+                      some: { columnId: col.id, intVal: { gt: filterInt } },
+                    },
+                  });
+                  continue;
+              }
+
+              if (filter.type === "lesser than"){
+                  conditions.push({
+                    cell: {
+                      some: { columnId: col.id, intVal: { lt: filterInt } },
+                    },
+                  });
+                  continue;
+              }
+            }
+          }
+        }
+      }
+
+  const whereClause: Prisma.RowWhereInput =
+    conditions.length === 0
+      ? baseRules
+      : logic === "AND"
+        ? { AND: [baseRules, ...conditions] }
+        : { AND: [baseRules, { OR: conditions }] };
+      
+    const rows = await ctx.db.row.findMany({
+      where: whereClause,
+      include: {
+        cell: true,
+      },
+      orderBy: [{createdAt: "asc"}],
+    });
+
+    if (sorts.length > 0) {
+      // Use a properly typed Map instead of any
+      const sortColumns = new Map<string, SortInfo>();
+      
+      for (const sort of sorts) {
+        const sortCol = table.column.find((c) => c.id === sort.columnId);
+        if (sortCol) {
+          sortColumns.set(sort.columnId, { 
+            column: sortCol,
+            direction: sort.direction 
+          });
+        }
+      }
+
+      // When we change the value, we would have to remove the changed sort rules
+      // -> only take sorts that only include valid columns
+      const validSorts = sorts.filter(sort => sortColumns.has(sort.columnId));
+
+      if (validSorts.length > 0) {
+        rows.sort((a, b) => {
+          for (const sort of validSorts) {
+            const sortInfo = sortColumns.get(sort.columnId);
+            if (!sortInfo) continue;
+
+            const ac = a.cell.find((c) => c.columnId === sortInfo.column.id);
+            const bc = b.cell.find((c) => c.columnId === sortInfo.column.id);
+
+            let cmp = 0;
+
+            if (sortInfo.column.stringVal) {
+              const av = (ac?.stringVal ?? "").toLowerCase();
+              const bv = (bc?.stringVal ?? "").toLowerCase();
+              cmp = av.localeCompare(bv);
+            } else if (sortInfo.column.intVal) {
+              const av = ac?.intVal ?? 0;
+              const bv = bc?.intVal ?? 0;
+              cmp = av - bv;
+            }
+
+            if (sortInfo.direction === "desc") {
+              cmp = -cmp;
+            }
+
+            if (cmp !== 0) {
+              return cmp;
+            }
+          }
+          
+          return 0;
+        });
+      }
+    }
+
+    return rows.map((r) => ({
+      id: r.id,
+      tableId: tableId,
+      createdAt: r.createdAt,
+      cells: r.cell.map((c) => ({
+        id: c.id,
+        rowId: c.rowId,
+        columnId: c.columnId,
+        stringVal: c.stringVal,
+        intVal: c.intVal,
+      })),
+    }));
+    }),
+});
