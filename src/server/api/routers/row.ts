@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createTRPCRouter, privateProcedure } from "~/server/api/trpc";
 import { Prisma } from "@prisma/client";
 import { TRPCError } from "@trpc/server";
+import Filter from "~/components/table/Function/filter";
+import Sort from "~/components/table/Function/sort";
 
 const filterSchema = z.object({
   columnId: z.string(),

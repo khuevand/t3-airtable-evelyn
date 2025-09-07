@@ -85,7 +85,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
     if (e.key === "Enter") {
       e.preventDefault();
       if (isEditing) {
-        handleSave();
+        void handleSave();
         setTimeout(() => {
           if (onNavigate) {
             onNavigate("down");
@@ -104,7 +104,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
     else if (e.key === "Tab") {
       e.preventDefault();
       if (isEditing) {
-        handleSave();
+        void handleSave();
       }
       if (onNavigate) {
         const direction = e.shiftKey ? 'shift-tab' : 'tab';
@@ -117,7 +117,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
       if (!isEditing || inputRef.current?.selectionStart === 0) {
         e.preventDefault();
         if (isEditing) {
-          handleSave();
+          void handleSave();
         }
         if (onNavigate) {
           setTimeout(() => {
@@ -130,7 +130,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
       if (!isEditing || inputRef.current?.selectionStart === inputRef.current?.value.length) {
         e.preventDefault();
         if (isEditing) {
-          handleSave();
+          void handleSave();
         }
         if (onNavigate) {
           setTimeout(() => {
@@ -143,7 +143,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
       if (!isEditing || inputRef.current?.selectionStart === 0) {
         e.preventDefault();
         if (isEditing) {
-          handleSave();
+          void handleSave();
         }
         if (onNavigate) {
           setTimeout(() => {
@@ -156,7 +156,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
       if (!isEditing || inputRef.current?.selectionStart === inputRef.current?.value.length) {
         e.preventDefault();
         if (isEditing) {
-          handleSave();
+          void handleSave();
         }
         if (onNavigate) {
           setTimeout(() => {
@@ -178,7 +178,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
 
   const handleBlur = useCallback(() => {
     if (isEditing) {
-      handleSave();
+      void handleSave();
     }
   }, [handleSave, isEditing]);
 
@@ -199,7 +199,7 @@ export const EditableCell: React.FC<EditableCellProps> = ({
     }
   }, [isFocused, isEditing, onFocusCell, rowId, columnId]);
 
-  const displayValue = value || (typeof initialValue === 'number' ? initialValue.toString() : initialValue || "");
+  const displayValue = value ?? (typeof initialValue === 'number' ? initialValue.toString() : initialValue || "");
 
   if (isEditing) {
     return (
