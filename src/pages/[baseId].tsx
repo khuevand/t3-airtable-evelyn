@@ -62,6 +62,8 @@ type Filter = { columnId: string; type: FilterType; value?: string | number | nu
 type Sort = { columnId: string; direction: "asc" | "desc" };
 
 
+type filterLogic = "AND" | "OR";
+
 export default function BasePage(){
   const router = useRouter();
   const utils = api.useUtils();
@@ -72,11 +74,12 @@ export default function BasePage(){
   const [isHomeIconHover, setHomeIconHover] = useState(false);
   const [activeTableId, setActiveTableId] = useState<string | undefined>(undefined);
   const [isCreateColumn, setCreateColumn] = useState(false);
-  // const [isCreateTable, setCreateTable] = useState(false);
-  // const [isDeleteTable, setDeleteTable] = useState(false);
 
-  const [filter, setFilter] = useState<Filter | null>(null);
-  const [sort, setSort] = useState<Sort | null>(null);
+
+  const [filters, setFilters] = useState<Filter[]>([]);
+  const [filterLogic, setFilterLogic] = useState<filterLogic>("AND");
+  const [sorts, setSorts] = useState<Sort[]>([]);
+
 
   const [deleteMenu, setDeleteMenu] = useState<{
     type: "row" | "column" | null;
@@ -100,12 +103,12 @@ export default function BasePage(){
   const { data: opRows, isLoading: isRowsLoading } = api.row.getRowsByOperation.useQuery(
     {
       tableId: activeTableId!,
-      filter: filter ?? undefined,
-      sort: sort ?? undefined,
+      filters: filters,
+      sorts: sorts,
+      logic: filterLogic,
     },
     { enabled: !!activeTableId }
   );
-   const isTableUiLoading = isTableLoading ?? isActiveTableLoading ?? isRowsLoading;
  
   const createTable = api.table.createTable.useMutation({
     onMutate: async({ baseId }) => {
@@ -159,9 +162,6 @@ export default function BasePage(){
     },
 
     onSettled: (_data, _err, ctx) => {
-      // void utils.base.getBaseById.invalidate({ baseId: ctx.baseId });
-      // void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      // void utils.row.getRowsByOperation.invalidate();
       void utils.table.getTableByBaseId.invalidate({ baseId: ctx.baseId });
     },
   });
@@ -202,9 +202,6 @@ export default function BasePage(){
     },
 
     onSettled: (_data, _error, _variables, ctx) => {
-      // void utils.base.getBaseById.invalidate({baseId: ctx?.baseId});
-      // void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      // void utils.row.getRowsByOperation.invalidate();
       void utils.table.getTableByBaseId.invalidate({ baseId: ctx?.baseId });
     }
   });
@@ -212,8 +209,11 @@ export default function BasePage(){
   const addRow = api.row.createRow.useMutation({
     onSuccess: () => {
       toast.success("Row created successfully!");
-      // void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      void utils.row.getRowsByOperation.invalidate();
+      void utils.row.getRowsByOperation.invalidate({
+        tableId: activeTableId!,
+        filters: filters,
+        sorts: sorts,
+      });
     },
     onError: () => {
       toast.error("Error creating row.");
@@ -224,8 +224,11 @@ export default function BasePage(){
   const deleteRow = api.row.deleteRow.useMutation({
     onSuccess: () => {
       toast.success("Row deleted successfully!");
-      // void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      void utils.row.getRowsByOperation.invalidate();
+      void utils.row.getRowsByOperation.invalidate({
+        tableId: activeTableId!,
+        filters: filters,
+        sorts: sorts,
+      });
     },
     onError: () => {
       toast.error("Error deleting row.");
@@ -237,7 +240,11 @@ export default function BasePage(){
     onSuccess: () => {
       toast.success("Column created successfully!");
       void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      void utils.row.getRowsByOperation.invalidate();
+      void utils.row.getRowsByOperation.invalidate({
+        tableId: activeTableId!,
+        filters: filters,
+        sorts: sorts,
+      });
     },
     onError: () => {
       toast.error("Error creating column.");
@@ -249,7 +256,11 @@ export default function BasePage(){
     onSuccess: () => {
       toast.success("Column deleted successfully!");
       void utils.table.getTableById.invalidate({ tableId: activeTableId });
-      void utils.row.getRowsByOperation.invalidate();
+      void utils.row.getRowsByOperation.invalidate({
+        tableId: activeTableId!,
+        filters: filters,
+        sorts: sorts,
+      });
     },
     onError: () => {
       toast.error("Error deleting column.");
@@ -266,7 +277,12 @@ export default function BasePage(){
     else{
       setActiveTableId((prev) => {
         const tableStillExist = prev && tableData.some(t => t.id === prev);
-        return tableStillExist ? prev : tableData[0]?.id ?? undefined;
+        const newActiveTableId = tableStillExist ? prev : tableData[0]?.id ?? undefined;
+        if (newActiveTableId !== prev) {
+          setFilters([]);
+          setSorts([]);
+        }
+        return newActiveTableId;
       })
     } 
   }, [tableData, isTableLoading]);
@@ -287,7 +303,7 @@ export default function BasePage(){
 
 
   const transformColumns = useMemo<ColumnDef<FlattenedRow, CellPrimitive>[]>(() => {
-    if (!activeTableData || !activeTableData?.row) {
+    if (!activeTableData || !activeTableData?.column) {
       return [];
     };
 
@@ -417,10 +433,12 @@ export default function BasePage(){
         {activeTableData && activeTableData.column.length > 0 && (
           <FunctionBar
             columns={activeTableData?.column ?? []}
-            filter={filter}
-            sort={sort}
-            onFilterChange={setFilter}
-            onSortChange={setSort}
+            filters={filters}
+            sorts={sorts}
+            filterLogic={filterLogic}
+            onFilterChange={setFilters}
+            onSortChange={setSorts}
+            onFilterLogicChange={setFilterLogic}
           />
         )}
 

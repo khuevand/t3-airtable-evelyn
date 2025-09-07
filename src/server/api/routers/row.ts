@@ -73,12 +73,13 @@ export const rowRouter = createTRPCRouter({
     .input(
       z.object({
         tableId: z.string(),
-        filter: filterSchema.nullish(),
-        sort: sortSchema.nullish(),
+        filters: z.array(filterSchema).default([]),
+        sorts: z.array(sortSchema).default([]),
+        logic: z.enum(["AND", "OR"]).default("AND"),
       }),
     )
     .query(async ({ ctx, input }) => {
-      const { tableId, filter, sort } = input;
+      const { tableId, filters, sorts, logic } = input;
 
       const table = await ctx.db.table.findUnique({
         where: { id: tableId },
@@ -88,9 +89,10 @@ export const rowRouter = createTRPCRouter({
         throw new TRPCError({ code: "NOT_FOUND", message: "Table not found" });
       }
 
-      const AND: Prisma.RowWhereInput[] = [{ tableId }];
+      const baseRules: Prisma.RowWhereInput = { tableId };
+      const conditions: Prisma.RowWhereInput[] = [];
 
-      if (filter) {
+      for (const filter of filters) {
         const col = table.column.find((c) => c.id === filter.columnId);
         if (col) {
           const v = filter.value;
@@ -98,9 +100,8 @@ export const rowRouter = createTRPCRouter({
           if (col.stringVal) {
             const filterStr = String(v ?? "");
 
-            switch (filter.type) {
-              case "is":
-                AND.push({
+           if (filter.type === "is"){
+                conditions.push({
                   cell: {
                     some: {
                       columnId: col.id,
@@ -108,10 +109,11 @@ export const rowRouter = createTRPCRouter({
                     },
                   },
                 });
-                break;
+                continue;
+            }
 
-              case "is not":
-                AND.push({
+            if (filter.type === "is not"){
+                conditions.push({
                   NOT: {
                     cell: {
                       some: {
@@ -121,10 +123,11 @@ export const rowRouter = createTRPCRouter({
                     },
                   },
                 });
-                break;
+                continue;
+            }
 
-              case "contains":
-                AND.push({
+            if (filter.type === "contains"){
+                conditions.push({
                   cell: {
                     some: {
                       columnId: col.id,
@@ -132,10 +135,11 @@ export const rowRouter = createTRPCRouter({
                     },
                   },
                 });
-                break;
+                continue;
+            }
 
-              case "does not contain":
-                AND.push({
+            if (filter.type === "does not contain"){
+                conditions.push({
                   NOT: {
                     cell: {
                       some: {
@@ -145,10 +149,11 @@ export const rowRouter = createTRPCRouter({
                     },
                   },
                 });
-                break;
+                continue;
+            }
 
-              case "is empty":
-                AND.push({
+            if (filter.type === "is empty"){
+                conditions.push({
                   OR: [
                     { cell: { none: { columnId: col.id } } },
                     {
@@ -161,10 +166,11 @@ export const rowRouter = createTRPCRouter({
                     },
                   ],
                 });
-                break;
+                continue;
+            }
 
-              case "is not empty":
-                AND.push({
+            if (filter.type === "is not empty"){
+                conditions.push({
                   cell: {
                     some: {
                       columnId: col.id,
@@ -175,37 +181,42 @@ export const rowRouter = createTRPCRouter({
                     },
                   },
                 });
-                break;
+                continue;
             }
           }
 
           if (col.intVal) {
             const filterInt = typeof v === "string" ? Number(v) : (v as number | undefined);
             if (filterInt !== undefined && !Number.isNaN(filterInt)) {
-              switch (filter.type) {
-                case "greater than":
-                  AND.push({
+              if (filter.type === "greater than"){
+                  conditions.push({
                     cell: {
                       some: { columnId: col.id, intVal: { gt: filterInt } },
                     },
                   });
-                  break;
+                  continue;
+              }
 
-                case "lesser than":
-                  AND.push({
+              if (filter.type === "lesser than"){
+                  conditions.push({
                     cell: {
                       some: { columnId: col.id, intVal: { lt: filterInt } },
                     },
                   });
-                  break;
+                  continue;
               }
             }
           }
         }
       }
 
-  const whereClause: Prisma.RowWhereInput = AND.length > 1 ? { AND } : AND[0]!;
-    
+  const whereClause: Prisma.RowWhereInput =
+    conditions.length === 0
+      ? baseRules
+      : logic === "AND"
+        ? { AND: [baseRules, ...conditions] }
+        : { AND: [baseRules, { OR: conditions }] };
+      
     const rows = await ctx.db.row.findMany({
       where: whereClause,
       include: {
@@ -213,28 +224,52 @@ export const rowRouter = createTRPCRouter({
       },
       orderBy: [{createdAt: "asc"}],
     });
-     
-    if (sort) {
-      const sortCol = table.column.find((c) => c.id === sort.columnId);
-      if (sortCol) {
+
+    if (sorts.length > 0) {
+      const sortColumns = new Map();
+      for (const sort of sorts) {
+        const sortCol = table.column.find((c) => c.id === sort.columnId);
+        if (sortCol) {
+          sortColumns.set(sort.columnId, { 
+            column: sortCol,
+            direction: sort.direction 
+          });
+        }
+      }
+
+      // Filter sorts to only include valid columns
+      const validSorts = sorts.filter(sort => sortColumns.has(sort.columnId));
+
+      if (validSorts.length > 0) {
         rows.sort((a, b) => {
-          const ac = a.cell.find((c) => c.columnId === sortCol.id);
-          const bc = b.cell.find((c) => c.columnId === sortCol.id);
+          for (const sort of validSorts) {
+            const sortInfo = sortColumns.get(sort.columnId);
+            if (!sortInfo) continue;
 
-          if (sortCol.stringVal) {
-            const av = (ac?.stringVal ?? "").toLowerCase();
-            const bv = (bc?.stringVal ?? "").toLowerCase();
-            const cmp = av.localeCompare(bv);
-            return sort.direction === "desc" ? -cmp : cmp;
+            const ac = a.cell.find((c) => c.columnId === sortInfo.column.id);
+            const bc = b.cell.find((c) => c.columnId === sortInfo.column.id);
+
+            let cmp = 0;
+
+            if (sortInfo.column.stringVal) {
+              const av = (ac?.stringVal ?? "").toLowerCase();
+              const bv = (bc?.stringVal ?? "").toLowerCase();
+              cmp = av.localeCompare(bv);
+            } else if (sortInfo.column.intVal) {
+              const av = ac?.intVal ?? 0;
+              const bv = bc?.intVal ?? 0;
+              cmp = av - bv;
+            }
+
+            if (sortInfo.direction === "desc") {
+              cmp = -cmp;
+            }
+
+            if (cmp !== 0) {
+              return cmp;
+            }
           }
-
-          if (sortCol.intVal) {
-            const av = Number(ac?.intVal ?? 0);
-            const bv = Number(bc?.intVal ?? 0);
-            const cmp = av - bv;
-            return sort.direction === "desc" ? -cmp : cmp;
-          }
-
+          
           return 0;
         });
       }
@@ -252,7 +287,7 @@ export const rowRouter = createTRPCRouter({
         intVal: c.intVal,
       })
     ),
-    
+
     }))
     }),
 });
